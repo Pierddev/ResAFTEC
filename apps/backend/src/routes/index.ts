@@ -48,7 +48,8 @@ router.get("/", indexController.home);
  *                 example: jean.dupont@example.com
  *               password:
  *                 type: string
- *                 minLength: 10
+ *                 minLength: 1
+ *                 maxLength: 128
  *                 example: motdepasseSecurise123
  *     responses:
  *       200:
