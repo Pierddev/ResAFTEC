@@ -7,13 +7,13 @@ describe("createUserSchema", () => {
 			firstname: "John",
 			lastname: "Doe",
 			email: "john@example.com",
-			password: "password123",
+			password: "reservation-salle-b204",
 		});
 		expect(result).toEqual({
 			firstname: "John",
 			lastname: "Doe",
 			email: "john@example.com",
-			password: "password123",
+			password: "reservation-salle-b204",
 		});
 	});
 
@@ -22,22 +22,74 @@ describe("createUserSchema", () => {
 			firstname: "a".repeat(50),
 			lastname: "Doe",
 			email: "john@example.com",
-			password: "password123",
+			password: "reservation-salle-b204",
 		});
 		expect(result.firstname).toBe("a".repeat(50));
 	});
 
-	// Security concern: "aaaaaaaaaa" (10 chars) passes validation.
-	// The schema only enforces min length, not complexity.
-	// TODO: Add password complexity rules (uppercase, lowercase, digit, special char)
-	it("should accept password at minimum length even if weak", () => {
+	it("should accept a password of exactly 12 characters", () => {
 		const result = createUserSchema.parse({
 			firstname: "John",
 			lastname: "Doe",
 			email: "john@example.com",
-			password: "aaaaaaaaaa",
+			password: "b204-reserve",
 		});
-		expect(result.password).toBe("aaaaaaaaaa");
+		expect(result.password).toBe("b204-reserve");
+	});
+
+	it("should reject a password of 11 characters", () => {
+		expect(() =>
+			createUserSchema.parse({
+				firstname: "John",
+				lastname: "Doe",
+				email: "john@example.com",
+				password: "b204-reserv",
+			}),
+		).toThrow();
+	});
+
+	it("should accept a password of 128 characters", () => {
+		const result = createUserSchema.parse({
+			firstname: "John",
+			lastname: "Doe",
+			email: "john@example.com",
+			password: "a".repeat(128),
+		});
+		expect(result.password).toBe("a".repeat(128));
+	});
+
+	it("should reject a password longer than 128 characters", () => {
+		expect(() =>
+			createUserSchema.parse({
+				firstname: "John",
+				lastname: "Doe",
+				email: "john@example.com",
+				password: "a".repeat(129),
+			}),
+		).toThrow();
+	});
+
+	// Pas de règle de composition : pas besoin de majuscule, de chiffre
+	// ou de caractère spécial. Les espaces et les accents sont acceptés.
+	it("should accept a password with only lowercase letters, spaces and accents", () => {
+		const result = createUserSchema.parse({
+			firstname: "John",
+			lastname: "Doe",
+			email: "john@example.com",
+			password: "réservation de la salle",
+		});
+		expect(result.password).toBe("réservation de la salle");
+	});
+
+	// "e" + accent (2 caractères) doit devenir "é" (1 seul caractère)
+	it("should normalize the password to the NFC form", () => {
+		const result = createUserSchema.parse({
+			firstname: "John",
+			lastname: "Doe",
+			email: "john@example.com",
+			password: "salle de cafe\u0301",
+		});
+		expect(result.password).toBe("salle de caf\u00e9");
 	});
 
 	it("should reject empty firstname", () => {
@@ -46,7 +98,7 @@ describe("createUserSchema", () => {
 				firstname: "",
 				lastname: "Doe",
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -57,7 +109,7 @@ describe("createUserSchema", () => {
 				firstname: "a".repeat(51),
 				lastname: "Doe",
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -68,7 +120,7 @@ describe("createUserSchema", () => {
 				firstname: "John",
 				lastname: "",
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -79,7 +131,7 @@ describe("createUserSchema", () => {
 				firstname: "John",
 				lastname: "a".repeat(51),
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -90,7 +142,7 @@ describe("createUserSchema", () => {
 				firstname: "John",
 				lastname: "Doe",
 				email: "not-an-email",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -101,7 +153,7 @@ describe("createUserSchema", () => {
 				firstname: "John",
 				lastname: "Doe",
 				email: "",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -133,7 +185,7 @@ describe("createUserSchema", () => {
 			createUserSchema.parse({
 				lastname: "Doe",
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -143,7 +195,7 @@ describe("createUserSchema", () => {
 			createUserSchema.parse({
 				firstname: "John",
 				email: "john@example.com",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});
@@ -153,7 +205,7 @@ describe("createUserSchema", () => {
 			createUserSchema.parse({
 				firstname: "John",
 				lastname: "Doe",
-				password: "password123",
+				password: "reservation-salle-b204",
 			}),
 		).toThrow();
 	});

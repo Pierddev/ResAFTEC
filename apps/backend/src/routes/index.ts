@@ -150,7 +150,9 @@ router.post("/login", indexController.login);
  *                 example: jean.dupont@example.com
  *               password:
  *                 type: string
- *                 minLength: 10
+ *                 minLength: 12
+ *                 maxLength: 128
+ *                 description: Aucune obligation de majuscule, de chiffre ou de caractère spécial.
  *                 example: motdepasseSecurise123
  *     responses:
  *       201:
