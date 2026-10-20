@@ -152,7 +152,7 @@ router.post("/login", indexController.login);
  *                 type: string
  *                 minLength: 12
  *                 maxLength: 128
- *                 description: Aucune obligation de majuscule, de chiffre ou de caractère spécial.
+ *                 description: Aucune obligation de majuscule, de chiffre ou de caractère spécial. Les 10 000 mots de passe les plus utilisés sont refusés.
  *                 example: motdepasseSecurise123
  *     responses:
  *       201:

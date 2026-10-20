@@ -81,6 +81,43 @@ describe("createUserSchema", () => {
 		expect(result.password).toBe("réservation de la salle");
 	});
 
+	it("should reject a common password", () => {
+		expect(() =>
+			createUserSchema.parse({
+				firstname: "John",
+				lastname: "Doe",
+				email: "john@example.com",
+				password: "azertyuiop123",
+			}),
+		).toThrow();
+	});
+
+	// La liste est en minuscules : les majuscules ne doivent pas permettre
+	// de contourner la vérification.
+	it("should reject a common password whatever its case", () => {
+		expect(() =>
+			createUserSchema.parse({
+				firstname: "John",
+				lastname: "Doe",
+				email: "john@example.com",
+				password: "Password123!",
+			}),
+		).toThrow();
+	});
+
+	it("should explain why a common password is rejected", () => {
+		const result = createUserSchema.safeParse({
+			firstname: "John",
+			lastname: "Doe",
+			email: "john@example.com",
+			password: "password1234",
+		});
+		expect(result.success).toBe(false);
+		expect(result.error?.issues[0]?.message).toBe(
+			"Ce mot de passe est trop courant, choisissez-en un autre",
+		);
+	});
+
 	// "e" + accent (2 caractères) doit devenir "é" (1 seul caractère)
 	it("should normalize the password to the NFC form", () => {
 		const result = createUserSchema.parse({
