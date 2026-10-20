@@ -25,33 +25,41 @@ if (route.query.error === "unauthorized") {
 	errorMessage.value = "Vous devez être connecté pour accéder à cette page.";
 }
 
-// Async function to handle login form submission
+/**
+ * Vérifie le formulaire de connexion puis envoie l'email et le mot de passe
+ * au backend.
+ *
+ * On ne vérifie pas la longueur minimale du mot de passe ici : un compte
+ * créé avec d'anciennes règles doit pouvoir se connecter. On vérifie
+ * seulement la longueur maximale (128 caractères), comme le backend.
+ */
 async function handleSubmit() {
-	// Reset error message at the beginning of the attempt
+	// On efface l'ancien message d'erreur au début de chaque tentative
 	errorMessage.value = "";
 
-	// Validate that email and password are provided
+	// On vérifie que l'email et le mot de passe sont remplis
 	if (!email.value || !password.value) {
 		errorMessage.value = "Tous les champs sont requis";
 		return;
 	}
 
-	if (password.value.length < 10) {
-		errorMessage.value = "Le mot de passe doit contenir au moins 10 caractères";
+	if (password.value.length > 128) {
+		errorMessage.value = "Le mot de passe ne doit pas dépasser 128 caractères";
 		return;
 	}
 
-	// Set isLoading to true to prevent multiple attempts on the submit button
+	// isLoading désactive le bouton pour éviter d'envoyer plusieurs fois le formulaire
 	isLoading.value = true;
 	try {
 		await authStore.login(email.value, password.value);
-		// For now we log, then we will redirect to the dashboard
+		// Connexion réussie : on redirige vers le tableau de bord
 		router.push("/dashboard");
 	} catch (error) {
-		// Type assertion: The error is expected to be an object with a message property
+		// L'erreur renvoyée par le backend est un objet avec une propriété "message"
+		// (ex. mauvais identifiants, ou trop de tentatives ratées)
 		errorMessage.value = (error as { message: string }).message;
 	} finally {
-		// Finally, set loading to false to enable the submit button
+		// Dans tous les cas, on réactive le bouton
 		isLoading.value = false;
 	}
 }

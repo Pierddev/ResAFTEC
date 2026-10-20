@@ -52,7 +52,7 @@ describe("IndexController", () => {
 			firstname: "John",
 			lastname: "Doe",
 			email: "john@example.com",
-			password: "password123",
+			password: "reservation-salle-b204",
 		};
 
 		it("should return 400 if the request body is invalid", async () => {
