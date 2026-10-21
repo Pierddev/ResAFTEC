@@ -34,6 +34,10 @@ jest.unstable_mockModule("jsonwebtoken", () => ({
 	},
 }));
 
+// Au chargement, le service calcule son hash factice avec argon2.hash
+const dummyHash = "dummyHash";
+mockArgon2Hash.mockResolvedValueOnce(dummyHash);
+
 // --- Service import (after setting up mocks) ---
 const { UserService } = await import("../src/services/indexService.js");
 
@@ -189,6 +193,26 @@ describe("UserService", () => {
 			await expect(userService.login(dto)).rejects.toThrow(
 				"Incorrect password or email address.",
 			);
+		});
+
+		it("should verify the password against a dummy hash and still reject when the user is not found", async () => {
+			// Arrange
+			const dto = {
+				email: "unknown@example.com",
+				password: "dummy-password",
+			};
+
+			mockRepository.findOne.mockResolvedValueOnce(null);
+			// Même si le mot de passe correspondait au hash factice,
+			// la connexion doit être refusée
+			mockArgon2Verify.mockResolvedValueOnce(true);
+
+			// Act & Assert
+			await expect(userService.login(dto)).rejects.toThrow(
+				"Incorrect password or email address.",
+			);
+			expect(mockArgon2Verify).toHaveBeenCalledWith(dummyHash, dto.password);
+			expect(mockJwtSign).not.toHaveBeenCalled();
 		});
 
 		it("should throw an error when the password is incorrect", async () => {

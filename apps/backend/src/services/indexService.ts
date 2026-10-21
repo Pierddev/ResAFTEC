@@ -8,6 +8,11 @@ import type { loginUserDto } from "../dtos/loginUser.dto.js";
 import { Role } from "../entity/Role.entity.js";
 import { User } from "../entity/User.entity.js";
 
+// Hash "factice", calculé une seule fois au chargement de ce fichier (donc au
+// démarrage du serveur), avec les mêmes réglages que les vrais mots de passe.
+// Il sert dans login() quand l'email n'existe pas.
+const dummyHash = await argon2.hash("dummy-password", argon2Options);
+
 export class UserService {
 	async register(dto: createUserDto) {
 		const userRepository = AppDataSource.getRepository(User);
@@ -51,6 +56,11 @@ export class UserService {
 
 		// For security reason we do not distinguish between user not found and invalid password
 		if (!user) {
+			// On vérifie quand même le mot de passe saisi, contre le hash factice.
+			// Sans ça, la réponse arriverait plus vite quand l'email n'existe pas
+			// (aucun calcul Argon2) : en mesurant ce temps, un attaquant saurait
+			// si un compte existe. Le résultat est ignoré : on refuse toujours.
+			await argon2.verify(dummyHash, dto.password);
 			throw new Error("Incorrect password or email address.");
 		}
 
