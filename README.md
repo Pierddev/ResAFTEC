@@ -173,6 +173,18 @@ npm run dev
 | Professeur | `olive97@hotmail.fr` | `Password123!`
 | Etudiant | `elsa_joly58@hotmail.fr` | `Password123!`
 
+### Documentation de l'API
+
+Une fois le backend lancé (port `3000` dans l'exemple de `.env`) :
+
+| URL | Description |
+|---|---|
+| `http://localhost:3000/api/docs` | Swagger UI : documentation interactive, pour tester les routes avec « Try it out » |
+| `http://localhost:3000/docs` | Redoc : même documentation, en lecture seule |
+| `http://localhost:3000/openapi.json` | Spécification OpenAPI 3 au format JSON |
+
+Les routes protégées lisent le token JWT dans un cookie HttpOnly : dans Swagger UI, appelez d'abord `POST /api/login` avec un utilisateur de test, le navigateur enverra ensuite le cookie automatiquement.
+
 ## 5. Commandes Personnalisées
 
 ### Commandes Racine
