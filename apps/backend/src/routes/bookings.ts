@@ -14,7 +14,7 @@ const bookingController = new BookingController();
  *     tags:
  *       - Bookings
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: classroomId
@@ -63,7 +63,7 @@ router.get(
  *     tags:
  *       - Bookings
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     requestBody:
  *       required: true
  *       content:

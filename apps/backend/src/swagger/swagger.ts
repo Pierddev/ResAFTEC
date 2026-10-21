@@ -23,10 +23,14 @@ const options: swaggerJsdoc.Options = {
 		servers: [{ url: "/", description: "Serveur courant" }],
 		components: {
 			securitySchemes: {
-				bearerAuth: {
-					type: "http",
-					scheme: "bearer",
-					bearerFormat: "JWT",
+				// Le JWT n'est pas envoyé dans l'en-tête Authorization :
+				// il est stocké dans le cookie HttpOnly "token" (voir authenticate.ts)
+				cookieAuth: {
+					type: "apiKey",
+					in: "cookie",
+					name: "token",
+					description:
+						"Token JWT stocké dans le cookie HttpOnly `token`, créé par `POST /api/login`. Dans Swagger UI, appelez d'abord `/api/login` avec « Try it out » : le navigateur garde le cookie et l'envoie ensuite tout seul aux autres routes.",
 				},
 			},
 		},

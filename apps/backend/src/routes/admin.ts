@@ -22,7 +22,7 @@ adminRouter.get("/basic", basicAuth, (_req: Request, res: Response) => {
  *     tags:
  *       - Admin
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: Liste des utilisateurs récupérée avec succès

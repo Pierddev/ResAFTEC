@@ -14,7 +14,7 @@ const floorController = new FloorController();
  *     tags:
  *       - Floors
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: buildingId
