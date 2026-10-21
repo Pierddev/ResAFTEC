@@ -8,10 +8,12 @@ const mockRepository = {
 	findOne: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
 	create: jest.fn<(...args: unknown[]) => unknown>(),
 	save: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
+	update: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
 };
 
 const mockArgon2Hash = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockArgon2Verify = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockArgon2NeedsRehash = jest.fn<(...args: unknown[]) => unknown>();
 const mockJwtSign = jest.fn<(...args: unknown[]) => unknown>();
 
 // --- Mocking modules before service import ---
@@ -25,6 +27,7 @@ jest.unstable_mockModule("argon2", () => ({
 	default: {
 		hash: mockArgon2Hash,
 		verify: mockArgon2Verify,
+		needsRehash: mockArgon2NeedsRehash,
 	},
 }));
 
@@ -157,6 +160,7 @@ describe("UserService", () => {
 
 			mockRepository.findOne.mockResolvedValueOnce(fakeUser);
 			mockArgon2Verify.mockResolvedValueOnce(true);
+			mockArgon2NeedsRehash.mockReturnValueOnce(false);
 			mockJwtSign.mockReturnValueOnce(fakeToken);
 
 			// Act
@@ -173,11 +177,49 @@ describe("UserService", () => {
 				fakeUser.password,
 				dto.password,
 			);
+			// Les réglages n'ont pas changé : le mot de passe n'est pas re-haché
+			expect(mockRepository.update).not.toHaveBeenCalled();
 			expect(mockJwtSign).toHaveBeenCalledWith(
 				{ userId: fakeUser.id, role: fakeUser.role.name },
 				expect.any(String),
 				{ expiresIn: "1h" },
 			);
+		});
+
+		it("should rehash and save the password when the Argon2 settings have changed", async () => {
+			// Arrange
+			const dto = {
+				email: "john@example.com",
+				password: "password123",
+			};
+			const fakeUser = {
+				id: 1,
+				email: "john@example.com",
+				password: "oldHash",
+				role: { id: 1, name: "student" },
+			};
+			const fakeToken = "jwt.token.here";
+
+			mockRepository.findOne.mockResolvedValueOnce(fakeUser);
+			mockArgon2Verify.mockResolvedValueOnce(true);
+			mockArgon2NeedsRehash.mockReturnValueOnce(true);
+			mockArgon2Hash.mockResolvedValueOnce("newHash");
+			mockJwtSign.mockReturnValueOnce(fakeToken);
+
+			// Act
+			const result = await userService.login(dto);
+
+			// Assert
+			expect(mockArgon2NeedsRehash).toHaveBeenCalledWith(
+				fakeUser.password,
+				argon2Options,
+			);
+			expect(mockArgon2Hash).toHaveBeenCalledWith(dto.password, argon2Options);
+			expect(mockRepository.update).toHaveBeenCalledWith(fakeUser.id, {
+				password: "newHash",
+			});
+			// La connexion réussit normalement
+			expect(result.token).toBe(fakeToken);
 		});
 
 		it("should throw an error when the user is not found", async () => {

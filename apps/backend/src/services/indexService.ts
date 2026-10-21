@@ -73,6 +73,17 @@ export class UserService {
 			throw new Error("Incorrect password or email address.");
 		}
 
+		// Si les réglages de config/argon2.ts ont changé depuis la création de ce
+		// hash (par exemple plus de mémoire), needsRehash renvoie true : on
+		// re-hache alors le mot de passe avec les nouveaux réglages. C'est le seul
+		// moment possible, car on a le mot de passe en clair et on sait qu'il est
+		// correct (la base ne contient que des hash).
+		if (argon2.needsRehash(user.password, argon2Options)) {
+			const newHash = await argon2.hash(dto.password, argon2Options);
+			// update() modifie seulement la colonne password de cet utilisateur
+			await userRepository.update(user.id, { password: newHash });
+		}
+
 		// Generate token
 		const token = jwt.sign(
 			{
