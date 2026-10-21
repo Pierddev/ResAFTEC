@@ -14,7 +14,7 @@ const equipmentController = new EquipmentController();
  *     tags:
  *       - Equipments
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: classroomId

@@ -14,7 +14,7 @@ const buildingController = new BuildingController();
  *     tags:
  *       - Buildings
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     responses:
  *       200:
  *         description: Liste des bâtiments récupérée avec succès
