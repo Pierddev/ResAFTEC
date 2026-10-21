@@ -32,6 +32,12 @@ const options: swaggerJsdoc.Options = {
 					description:
 						"Token JWT stocké dans le cookie HttpOnly `token`, créé par `POST /api/login`. Dans Swagger UI, appelez d'abord `/api/login` avec « Try it out » : le navigateur garde le cookie et l'envoie ensuite tout seul aux autres routes.",
 				},
+				// Identifiant et mot de passe envoyés dans l'en-tête Authorization
+				// (voir basicAuth.ts)
+				basicAuth: {
+					type: "http",
+					scheme: "basic",
+				},
 			},
 		},
 	},
