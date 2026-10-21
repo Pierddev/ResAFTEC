@@ -2,12 +2,16 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Express, Request, Response } from "express";
 import redoc from "redoc-express";
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
-const projectRoot = process.cwd();
+// Dossier src/, calculé à partir de l'emplacement de ce fichier (src/swagger/)
+// et non du dossier de lancement : la doc se génère aussi quand les tests
+// sont lancés depuis la racine du dépôt
+const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // Configuration de Swagger
 const options: swaggerJsdoc.Options = {
@@ -42,8 +46,8 @@ const options: swaggerJsdoc.Options = {
 		},
 	},
 	apis: [
-		path.resolve(projectRoot, "src/routes/*.ts").replace(/\\/g, "/"),
-		path.resolve(projectRoot, "src/entity/*.ts").replace(/\\/g, "/"),
+		path.resolve(srcDir, "routes/*.ts").replace(/\\/g, "/"),
+		path.resolve(srcDir, "entity/*.ts").replace(/\\/g, "/"),
 	],
 };
 
@@ -51,7 +55,7 @@ const specs = swaggerJsdoc(options);
 
 // Écrit le fichier openapi.json
 fs.writeFileSync(
-	path.resolve(projectRoot, "src/openapi.json"),
+	path.resolve(srcDir, "openapi.json"),
 	JSON.stringify(specs, null, 2),
 );
 
