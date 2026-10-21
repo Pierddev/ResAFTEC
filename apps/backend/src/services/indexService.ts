@@ -1,11 +1,12 @@
-import bcrypt from "bcrypt";
+import argon2 from "argon2";
 import jwt from "jsonwebtoken";
+import { argon2Options } from "../config/argon2.js";
 import { env } from "../config/env.js";
 import { AppDataSource } from "../database/data-source.js";
 import type { createUserDto } from "../dtos/createUser.dto.js";
 import type { loginUserDto } from "../dtos/loginUser.dto.js";
 import { Role } from "../entity/Role.entity.js";
-import { HashSalt, User } from "../entity/User.entity.js";
+import { User } from "../entity/User.entity.js";
 
 export class UserService {
 	async register(dto: createUserDto) {
@@ -24,8 +25,8 @@ export class UserService {
 			throw new Error("Default role not found");
 		}
 
-		// Hash password
-		const hashedPassword = await bcrypt.hash(dto.password, HashSalt);
+		// Hash password (réglages d'Argon2id dans config/argon2.ts)
+		const hashedPassword = await argon2.hash(dto.password, argon2Options);
 
 		// Create user
 		const user = userRepository.create({
@@ -54,7 +55,9 @@ export class UserService {
 		}
 
 		// Compare password
-		const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+		// Attention à l'ordre : d'abord le hash enregistré, puis le mot de passe
+		// saisi. argon2 relit le sel et les réglages (m, t, p) dans le hash.
+		const isPasswordValid = await argon2.verify(user.password, dto.password);
 		if (!isPasswordValid) {
 			// For security reason we do not distinguish between user not found and invalid password
 			throw new Error("Incorrect password or email address.");

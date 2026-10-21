@@ -4,10 +4,9 @@ import {
 	JoinColumn,
 	ManyToOne,
 	PrimaryGeneratedColumn,
+	type Relation,
 } from "typeorm";
 import { Role } from "./Role.entity.js";
-
-export const HashSalt = 10;
 
 /**
  * @swagger
@@ -49,11 +48,14 @@ export class User {
 	@Column({ type: "varchar", length: 255 })
 	password!: string;
 
+	// Relation<Role> est exactement le même type que Role. Il évite l'erreur
+	// "Cannot access 'Role' before initialization" quand Role.entity.ts est
+	// chargé avant ce fichier : Role et User s'importent l'un l'autre.
 	@ManyToOne(
 		() => Role,
 		(role) => role.users,
 		{ nullable: false },
 	)
 	@JoinColumn({ name: "role_id" })
-	role!: Role;
+	role!: Relation<Role>;
 }

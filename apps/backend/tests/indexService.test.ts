@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { HashSalt } from "../src/entity/User.entity.js";
+import { argon2Options } from "../src/config/argon2.js";
 import type { UserService as UserServiceType } from "../src/services/indexService.js";
 
 // --- Reusable mocks ---
@@ -10,8 +10,8 @@ const mockRepository = {
 	save: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
 };
 
-const mockBcryptHash = jest.fn<(...args: unknown[]) => Promise<unknown>>();
-const mockBcryptCompare = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockArgon2Hash = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockArgon2Verify = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockJwtSign = jest.fn<(...args: unknown[]) => unknown>();
 
 // --- Mocking modules before service import ---
@@ -21,10 +21,10 @@ jest.unstable_mockModule("../src/database/data-source.js", () => ({
 	},
 }));
 
-jest.unstable_mockModule("bcrypt", () => ({
+jest.unstable_mockModule("argon2", () => ({
 	default: {
-		hash: mockBcryptHash,
-		compare: mockBcryptCompare,
+		hash: mockArgon2Hash,
+		verify: mockArgon2Verify,
 	},
 }));
 
@@ -70,7 +70,7 @@ describe("UserService", () => {
 				.mockResolvedValueOnce(fakeRole); // 2nd call: role found
 			mockRepository.create.mockReturnValue(fakeUser);
 			mockRepository.save.mockResolvedValue(fakeUser);
-			mockBcryptHash.mockResolvedValue("hashedPwd");
+			mockArgon2Hash.mockResolvedValue("hashedPwd");
 
 			// Act
 			const result = await userService.register(dto);
@@ -83,7 +83,7 @@ describe("UserService", () => {
 			expect(mockRepository.findOneBy).toHaveBeenCalledWith({
 				name: "student",
 			});
-			expect(mockBcryptHash).toHaveBeenCalledWith(dto.password, HashSalt);
+			expect(mockArgon2Hash).toHaveBeenCalledWith(dto.password, argon2Options);
 			expect(mockRepository.create).toHaveBeenCalledWith({
 				firstname: dto.firstname,
 				lastname: dto.lastname,
@@ -152,7 +152,7 @@ describe("UserService", () => {
 			const fakeToken = "jwt.token.here";
 
 			mockRepository.findOne.mockResolvedValueOnce(fakeUser);
-			mockBcryptCompare.mockResolvedValueOnce(true);
+			mockArgon2Verify.mockResolvedValueOnce(true);
 			mockJwtSign.mockReturnValueOnce(fakeToken);
 
 			// Act
@@ -164,9 +164,10 @@ describe("UserService", () => {
 				where: { email: dto.email },
 				relations: { role: true },
 			});
-			expect(mockBcryptCompare).toHaveBeenCalledWith(
-				dto.password,
+			// argon2.verify reçoit d'abord le hash, puis le mot de passe saisi
+			expect(mockArgon2Verify).toHaveBeenCalledWith(
 				fakeUser.password,
+				dto.password,
 			);
 			expect(mockJwtSign).toHaveBeenCalledWith(
 				{ userId: fakeUser.id, role: fakeUser.role.name },
@@ -204,7 +205,7 @@ describe("UserService", () => {
 			};
 
 			mockRepository.findOne.mockResolvedValueOnce(fakeUser);
-			mockBcryptCompare.mockResolvedValueOnce(false);
+			mockArgon2Verify.mockResolvedValueOnce(false);
 
 			// Act & Assert
 			await expect(userService.login(dto)).rejects.toThrow(
