@@ -5,6 +5,7 @@ import * as path from "node:path";
 import type { Express, Request, Response } from "express";
 import redoc from "redoc-express";
 import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
 
 const projectRoot = process.cwd();
 
@@ -17,9 +18,9 @@ const options: swaggerJsdoc.Options = {
 			version: "1.0.0",
 			description: "Réservation de salle AFTEC",
 		},
-		servers: [
-			{ url: "http://localhost:3000", description: "Serveur de développement" },
-		],
+		// URL relative : "Try it out" appelle le serveur qui affiche la doc,
+		// quel que soit le port choisi dans le .env
+		servers: [{ url: "/", description: "Serveur courant" }],
 		components: {
 			securitySchemes: {
 				bearerAuth: {
@@ -45,6 +46,13 @@ fs.writeFileSync(
 );
 
 export const setupSwagger = (app: Express) => {
+	// Route pour Swagger UI : documentation interactive (bouton "Try it out")
+	app.use(
+		"/api/docs",
+		swaggerUi.serve,
+		swaggerUi.setup(specs, { customSiteTitle: "API Docs - Swagger" }),
+	);
+
 	// Route pour Redoc
 	// Utilisation de redoc-express avec transtypage pour contourner les limitations nodenext
 	const redocMiddleware = redoc as unknown as (
