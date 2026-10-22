@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0] - 2026-10-22
+
+### Added
+- **Admin routes**: Basic Auth middleware, `/admin` router and `GET /admin/users` endpoint
+- **Password policy**: minimum length, common-password blocklist, login rate limiting
+- **Session expiry handling**: 401 responses redirect to `/login`, navigation guard tests
+- **Swagger UI** served at `/api/docs` (cookie and Basic auth schemes documented)
+
+### Changed
+- Password hashing migrated from bcrypt to Argon2id (OWASP settings, constant-time login, automatic rehash)
+- Dependencies updated (Dependabot)
+
+### Fixed
+- `GET /admin/users` loads the role relation and no longer exposes passwords
+
+### Upgrade notes
+- Existing bcrypt hashes are no longer valid: run `npm run seed:dev` in `apps/backend` (resets the database)
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
