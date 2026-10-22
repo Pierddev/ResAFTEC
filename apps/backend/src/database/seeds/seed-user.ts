@@ -1,8 +1,9 @@
 import { fakerFR as faker } from "@faker-js/faker";
-import bcrypt from "bcrypt";
+import argon2 from "argon2";
 import type { DataSource } from "typeorm";
+import { argon2Options } from "../../config/argon2.js";
 import type { Role } from "../../entity/Role.entity.js";
-import { HashSalt, User } from "../../entity/User.entity.js";
+import { User } from "../../entity/User.entity.js";
 
 /**
  * Crée 3 utilisateurs (admin, teacher, student) avec des données aléatoires.
@@ -25,7 +26,7 @@ export async function seedUsers(
 
 	faker.seed(3);
 
-	const hashedPassword = await bcrypt.hash("Password123!", HashSalt);
+	const hashedPassword = await argon2.hash("Password123!", argon2Options);
 
 	const usersSpecs = [
 		{

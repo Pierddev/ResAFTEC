@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { IndexController } from "../controllers/indexController.js";
+import { loginRateLimiter } from "../middleware/loginRateLimiter.js";
 
 const router = Router();
 const indexController = new IndexController();
@@ -48,7 +49,8 @@ router.get("/", indexController.home);
  *                 example: jean.dupont@example.com
  *               password:
  *                 type: string
- *                 minLength: 10
+ *                 minLength: 1
+ *                 maxLength: 128
  *                 example: motdepasseSecurise123
  *     responses:
  *       200:
@@ -112,8 +114,20 @@ router.get("/", indexController.home);
  *                 message:
  *                   type: string
  *                   example: Incorrect password or email address.
+ *       429:
+ *         description: Trop de tentatives ratées (10 par heure pour un même couple IP + email)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Too many login attempts, please try again later.
  */
-router.post("/login", indexController.login);
+// loginRateLimiter s'exécute avant le contrôleur : il bloque la requête
+// si trop de tentatives ont déjà échoué
+router.post("/login", loginRateLimiter, indexController.login);
 
 /**
  * @swagger
@@ -149,7 +163,9 @@ router.post("/login", indexController.login);
  *                 example: jean.dupont@example.com
  *               password:
  *                 type: string
- *                 minLength: 10
+ *                 minLength: 12
+ *                 maxLength: 128
+ *                 description: Aucune obligation de majuscule, de chiffre ou de caractère spécial. Les 10 000 mots de passe les plus utilisés sont refusés.
  *                 example: motdepasseSecurise123
  *     responses:
  *       201:

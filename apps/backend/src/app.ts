@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env.js";
 import { AppDataSource } from "./database/data-source.js";
+import adminRoutes from "./routes/admin.js";
 import bookingRoutes from "./routes/bookings.js";
 import buildingRoutes from "./routes/buildings.js";
 import classroomRoutes from "./routes/classrooms.js";
@@ -38,6 +39,7 @@ app.use("/api", floorRoutes);
 app.use("/api", classroomRoutes);
 app.use("/api", bookingRoutes);
 app.use("/api", equipmentRoutes);
+app.use("/admin", adminRoutes);
 
 // BDD connexion and server start
 AppDataSource.initialize()

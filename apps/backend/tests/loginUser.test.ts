@@ -22,13 +22,40 @@ describe("loginUserSchema", () => {
 		).toThrow();
 	});
 
-	it("should reject a short password", () => {
+	// Les règles d'inscription (12 caractères minimum...) ne s'appliquent pas
+	// au login : un ancien compte doit toujours pouvoir se connecter.
+	it("should accept a short password", () => {
+		const result = loginUserSchema.parse({
+			email: "test@example.com",
+			password: "short",
+		});
+		expect(result.password).toBe("short");
+	});
+
+	it("should accept a password of 128 characters", () => {
+		const result = loginUserSchema.parse({
+			email: "test@example.com",
+			password: "a".repeat(128),
+		});
+		expect(result.password).toBe("a".repeat(128));
+	});
+
+	it("should reject a password longer than 128 characters", () => {
 		expect(() =>
 			loginUserSchema.parse({
 				email: "test@example.com",
-				password: "short",
+				password: "a".repeat(129),
 			}),
 		).toThrow();
+	});
+
+	// "e" + accent (2 caractères) doit devenir "é" (1 seul caractère)
+	it("should normalize the password to the NFC form", () => {
+		const result = loginUserSchema.parse({
+			email: "test@example.com",
+			password: "cafe\u0301",
+		});
+		expect(result.password).toBe("caf\u00e9");
 	});
 
 	it("should reject empty email", () => {

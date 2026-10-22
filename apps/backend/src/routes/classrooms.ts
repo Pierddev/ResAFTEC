@@ -14,7 +14,7 @@ const classroomController = new ClassroomController();
  *     tags:
  *       - Classrooms
  *     security:
- *       - bearerAuth: []
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: floorId

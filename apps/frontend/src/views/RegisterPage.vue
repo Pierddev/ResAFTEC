@@ -21,7 +21,14 @@ const showPassword = ref(false);
 const errorMessage = ref("");
 const isLoading = ref(false);
 
-// Async function to handle register form submission
+/**
+ * Vérifie le formulaire d'inscription puis envoie les données au backend.
+ *
+ * Les règles de longueur du mot de passe (12 à 128 caractères) sont les mêmes
+ * que celles du backend : l'utilisateur voit l'erreur tout de suite, sans
+ * attendre la réponse du serveur. La liste des mots de passe trop courants,
+ * elle, n'est vérifiée que par le backend.
+ */
 async function handleSubmit() {
 	errorMessage.value = "";
 	if (
@@ -34,8 +41,12 @@ async function handleSubmit() {
 		errorMessage.value = "Tous les champs sont requis";
 		return;
 	}
-	if (password.value.length < 10) {
-		errorMessage.value = "Le mot de passe doit contenir au moins 10 caractères";
+	if (password.value.length < 12) {
+		errorMessage.value = "Le mot de passe doit contenir au moins 12 caractères";
+		return;
+	}
+	if (password.value.length > 128) {
+		errorMessage.value = "Le mot de passe ne doit pas dépasser 128 caractères";
 		return;
 	}
 	if (password.value !== confirmPassword.value) {
@@ -52,7 +63,21 @@ async function handleSubmit() {
 		});
 		router.push("/login?registered=1");
 	} catch (error) {
-		errorMessage.value = (error as { message: string }).message;
+		// En cas d'erreur de validation, le backend renvoie
+		// { message: "Failed to validate request", error: [...] }.
+		// Le tableau "error" contient les règles non respectées, avec un message
+		// précis (ex. "Ce mot de passe est trop courant, choisissez-en un autre").
+		// On affiche la première règle si elle existe, sinon le message général.
+		const response = error as {
+			message: string;
+			error?: { message: string }[];
+		};
+		const firstRule = response.error?.[0];
+		if (firstRule) {
+			errorMessage.value = firstRule.message;
+		} else {
+			errorMessage.value = response.message;
+		}
 	} finally {
 		isLoading.value = false;
 	}
@@ -109,12 +134,17 @@ async function handleSubmit() {
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 placeholder="Votre mot de passe"
+                aria-describedby="password-rules"
                 required
                 />
                 <button type="button" @click="showPassword = !showPassword">
                     <img :src="showPassword ? eyeOpenIcon : eyeClosedIcon" class="w-5 h-5 absolute right-3 top-9.5 cursor-pointer" alt="Toggle password visibility" />
                 </button>
             </div>
+            <!-- Règles du mot de passe, affichées avant que l'utilisateur ne se trompe -->
+            <p id="password-rules" class="text-xs w-full opacity-70">
+                Entre 12 et 128 caractères. Les mots de passe trop courants sont refusés.
+            </p>
             <!-- confirm password field -->
             <div class="relative field w-full">
                 <label for="confirmPassword">Confirmer le mot de passe</label>
