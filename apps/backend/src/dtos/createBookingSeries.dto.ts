@@ -35,3 +35,5 @@ export const createBookingSeriesSchema = z.object({
 		message: "La date de fin doit être au format AAAA-MM-JJ",
 	}),
 });
+
+export type createBookingSeriesDto = z.infer<typeof createBookingSeriesSchema>;
