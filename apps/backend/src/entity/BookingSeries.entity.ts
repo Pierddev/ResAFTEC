@@ -10,6 +10,41 @@ import { User } from "./User.entity.js";
 
 // Une Série est une demande de réservation répétée chaque semaine :
 // même salle, même jour, même créneau, sur une plage de semaines.
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     BookingSeries:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: L'identifiant de la série
+ *         title:
+ *           type: string
+ *           description: Le titre de la série
+ *         day_of_week:
+ *           type: integer
+ *           description: Jour de la semaine (1 = lundi, ..., 7 = dimanche)
+ *         start_time:
+ *           type: string
+ *           description: Heure de début à Paris (HH:mm)
+ *         end_time:
+ *           type: string
+ *           description: Heure de fin à Paris (HH:mm)
+ *         start_date:
+ *           type: string
+ *           format: date
+ *           description: Lundi de la première semaine
+ *         end_date:
+ *           type: string
+ *           format: date
+ *           description: Dimanche de la dernière semaine
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *           description: Date de création
+ */
 @Entity({ name: "booking_series" })
 export class BookingSeries {
 	@PrimaryGeneratedColumn({ type: "bigint" })
