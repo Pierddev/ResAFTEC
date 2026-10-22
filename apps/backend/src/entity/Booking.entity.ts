@@ -7,6 +7,7 @@ import {
 	ManyToOne,
 	PrimaryGeneratedColumn,
 } from "typeorm";
+import { BookingSeries } from "./BookingSeries.entity.js";
 import { Classroom } from "./Classroom.entity.js";
 import { User } from "./User.entity.js";
 
@@ -69,6 +70,12 @@ export class Booking {
 	@ManyToOne(() => Classroom, { nullable: false })
 	@JoinColumn({ name: "classroom_id" })
 	classroom!: Classroom;
+
+	// Série dont fait partie la réservation.
+	// Vaut null pour une réservation simple (créée avec POST /create-booking)
+	@ManyToOne(() => BookingSeries, { nullable: true })
+	@JoinColumn({ name: "series_id" })
+	series!: BookingSeries | null;
 
 	@Column({ type: "datetime" })
 	created_at!: Date;
