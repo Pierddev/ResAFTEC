@@ -22,7 +22,7 @@
 		"zod": "^4.4.3"
 	},
 	"name": "backend",
-	"version": "0.2.0",
+	"version": "0.4.0",
 	"description": "",
 	"main": "index.js",
 	"devDependencies": {
