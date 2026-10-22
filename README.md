@@ -36,6 +36,52 @@ Ce diagramme modélise l'algorithme de réservation d'une salle, incluant les v�
   <img src="docs/images/usecases/booking_and_conflicts.png" alt="Diagramme de réservation" width="90%">
 </p>
 
+#### 4. Réservation Récurrente (Série)
+
+Un formateur ou un administrateur peut réserver la même salle **chaque semaine**, le même jour et sur le même créneau, avec la route `POST /api/create-booking-series`.
+
+**Règles :**
+
+- Le créneau est à l'heure de Paris : un cours de 10h-12h reste à 10h-12h après le changement d'heure.
+- La plage de semaines va du lundi de la première semaine au dimanche de la dernière, avec 52 semaines au maximum. Elle peut passer d'une année à l'autre.
+- Les occurrences déjà commencées sont ignorées.
+- Une occurrence est **en échec** si, sur ce créneau, la salle est déjà réservée (`already_booked`) ou désactivée (`disabled`), même partiellement.
+- Les occurrences libres sont réservées en une seule transaction. La série est enregistrée même si toutes ses occurrences sont en échec.
+- Un formateur ne peut réserver que pour lui-même ; un administrateur peut choisir le bénéficiaire. Un étudiant reçoit une erreur 403.
+
+**Exemple :** chaque mardi de 10h à 12h, du lundi 2 novembre au dimanche 13 décembre 2026.
+
+```json
+{
+  "title": "Cours de TypeScript",
+  "classroomId": 1,
+  "reservedForUserId": 2,
+  "dayOfWeek": 2,
+  "startTime": "10:00",
+  "endTime": "12:00",
+  "startDate": "2026-11-02",
+  "endDate": "2026-12-13"
+}
+```
+
+La réponse (201) est le rapport de série : la série enregistrée, les réservations obtenues (`booked`) et les occurrences en échec avec leur motif (`failed`).
+
+```json
+{
+  "series": { "id": 1, "title": "Cours de TypeScript", "day_of_week": 2, "...": "..." },
+  "booked": [
+    { "id": 51, "start_at": "2026-11-03T09:00:00.000Z", "end_at": "2026-11-03T11:00:00.000Z" }
+  ],
+  "failed": [
+    { "date": "2026-11-10T09:00:00.000Z", "reason": "already_booked" }
+  ]
+}
+```
+
+Les dates de la réponse sont en UTC (le `Z` à la fin) : `09:00Z` correspond à 10h à Paris en hiver.
+
+Le vocabulaire (Série, Occurrence, Bénéficiaire…) est défini dans [GLOSSARY.md](GLOSSARY.md), et les choix de conception sont expliqués dans [l'ADR 0001](docs/adr/0001-serie-de-reservations.md).
+
 ### Modèle de Données
 
 - **MCD (Modèle Conceptuel de Données) :**
