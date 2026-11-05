@@ -78,3 +78,48 @@ export function computeOccurrences(
 
 	return upcomingOccurrences;
 }
+
+/**
+ * Calcule le créneau d'une série à une date précise, à l'heure de Paris.
+ * Sert à chercher une salle de remplacement pour une occurrence en échec.
+ * Lance une erreur si la date n'est pas une occurrence de la série
+ * ou si le cours a déjà commencé.
+ *
+ * @param schedule - les informations de la série (jour, heures, plage de semaines)
+ * @param date - la date demandée au format "AAAA-MM-JJ", ex. : "2026-11-10"
+ * @param now - la date et l'heure actuelles
+ * @returns le début et la fin du cours ce jour-là
+ */
+export function computeOccurrenceOnDate(
+	schedule: SeriesSchedule,
+	date: string,
+	now: Date,
+): Occurrence {
+	const day = DateTime.fromISO(date);
+
+	// 1. La date doit tomber le jour de la série (ex. : un mardi).
+	// Pour Luxon aussi, 1 = lundi, 2 = mardi, ..., 7 = dimanche.
+	if (day.weekday !== schedule.dayOfWeek) {
+		throw new Error("La date ne tombe pas le jour de la série");
+	}
+
+	// 2. La date doit être dans la plage de semaines.
+	// Au format "AAAA-MM-JJ", les dates se comparent comme du texte.
+	if (date < schedule.startDate || date > schedule.endDate) {
+		throw new Error(
+			"La date est en dehors de la plage de semaines de la série",
+		);
+	}
+
+	const occurrence: Occurrence = {
+		start_at: atParisTime(day, schedule.startTime),
+		end_at: atParisTime(day, schedule.endTime),
+	};
+
+	// 3. On ne peut plus réserver un cours qui a déjà commencé
+	if (occurrence.start_at <= now) {
+		throw new Error("Cette occurrence a déjà commencé");
+	}
+
+	return occurrence;
+}

@@ -6,6 +6,8 @@ import {
 	it,
 	jest,
 } from "@jest/globals";
+import { LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
+import type { BookingSeries } from "../src/entity/BookingSeries.entity.js";
 import type { BookingSeriesService as BookingSeriesServiceType } from "../src/services/bookingSeriesService.js";
 
 // Faux repository : on choisit ce que renvoie chaque requête
@@ -13,6 +15,7 @@ import type { BookingSeriesService as BookingSeriesServiceType } from "../src/se
 const mockRepository = {
 	findOneBy: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
 	findOne: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
+	find: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
 	create: jest.fn((data: unknown) => data),
 	save: jest.fn(async (data: unknown) => data),
 };
@@ -95,5 +98,120 @@ describe("BookingSeriesService", () => {
 		expect(mockRepository.save).toHaveBeenCalledWith(result.series);
 		expect(result.booked).toEqual([]);
 		expect(result.failed).toHaveLength(3);
+	});
+});
+
+describe("BookingSeriesService - salles de remplacement", () => {
+	let bookingSeriesService: BookingSeriesServiceType;
+
+	// Salle principale : B101, 20 places, étage 10 du bâtiment 100
+	const mainClassroom = {
+		id: 1,
+		name: "B101",
+		capacity: 20,
+		floor: { id: 10, building: { id: 100 } },
+	};
+
+	// La série telle que la base la renvoie : les heures ont des secondes
+	const series = {
+		id: 7,
+		user: { id: 2 },
+		classroom: mainClassroom,
+		day_of_week: 2,
+		start_time: "10:00:00",
+		end_time: "12:00:00",
+		start_date: "2026-10-19",
+		end_date: "2026-11-08",
+	} as unknown as BookingSeries;
+
+	beforeEach(() => {
+		bookingSeriesService = new BookingSeriesService();
+		jest.clearAllMocks();
+		// mockReset efface aussi les réponses programmées par les tests précédents
+		mockRepository.findOne.mockReset();
+		mockRepository.find.mockReset();
+		jest.useFakeTimers({ now: new Date("2026-01-01T00:00:00Z") });
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+	});
+
+	it("should find a series with its author and its main classroom", async () => {
+		mockRepository.findOne.mockResolvedValue(series);
+
+		const result = await bookingSeriesService.findById(7);
+
+		expect(result).toBe(series);
+		expect(mockRepository.findOne).toHaveBeenCalledWith({
+			where: { id: 7 },
+			relations: { user: true, classroom: { floor: { building: true } } },
+		});
+	});
+
+	it("should return the free classrooms, the closest first", async () => {
+		// La base renvoie les salles assez grandes, dans le désordre
+		mockRepository.find.mockResolvedValue([
+			mainClassroom,
+			{ id: 2, name: "A001", floor: { id: 30, building: { id: 300 } } }, // autre bâtiment
+			{ id: 3, name: "B201", floor: { id: 20, building: { id: 100 } } }, // même bâtiment
+			{ id: 4, name: "B103", floor: { id: 10, building: { id: 100 } } }, // même étage
+			{ id: 5, name: "B102", floor: { id: 10, building: { id: 100 } } }, // même étage
+			{ id: 6, name: "B104", floor: { id: 10, building: { id: 100 } } }, // réservée
+			{ id: 7, name: "B105", floor: { id: 10, building: { id: 100 } } }, // désactivée
+		]);
+
+		// Pour chaque salle, on cherche une réservation puis une désactivation.
+		// La salle principale est ignorée : elle n'est pas vérifiée.
+		mockRepository.findOne
+			.mockResolvedValueOnce(null) // A001 : pas de réservation
+			.mockResolvedValueOnce(null) // A001 : pas de désactivation
+			.mockResolvedValueOnce(null) // B201
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce(null) // B103
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce(null) // B102
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce({ id: 99 }) // B104 : déjà réservée
+			.mockResolvedValueOnce(null) // B105 : pas de réservation...
+			.mockResolvedValueOnce({ id: 5 }); // ... mais désactivée
+
+		const result = await bookingSeriesService.getReplacementClassrooms(
+			series,
+			"2026-11-03",
+		);
+
+		// Même étage (triées par nom), puis même bâtiment, puis le reste
+		expect(result.map((classroom) => classroom.name)).toEqual([
+			"B102",
+			"B103",
+			"B201",
+			"A001",
+		]);
+
+		// Seules les salles d'au moins 20 places sont demandées à la base
+		expect(mockRepository.find).toHaveBeenCalledWith({
+			where: { capacity: MoreThanOrEqual(20) },
+			relations: { floor: { building: true } },
+		});
+
+		// Le créneau vérifié est le mardi 3 novembre, 10h-12h à Paris (9h-11h UTC)
+		expect(mockRepository.findOne).toHaveBeenCalledWith({
+			where: {
+				classroom: { id: 2 },
+				start_at: LessThan(new Date("2026-11-03T11:00:00Z")),
+				end_at: MoreThan(new Date("2026-11-03T09:00:00Z")),
+			},
+		});
+	});
+
+	it("should reject a date that is not an occurrence of the series", async () => {
+		// Le 4 novembre est un mercredi, la série a lieu le mardi
+		await expect(
+			bookingSeriesService.getReplacementClassrooms(series, "2026-11-04"),
+		).rejects.toThrow("La date ne tombe pas le jour de la série");
+
+		// Aucune salle n'est cherchée
+		expect(mockRepository.find).not.toHaveBeenCalled();
 	});
 });
