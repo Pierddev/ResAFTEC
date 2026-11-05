@@ -270,4 +270,105 @@ router.post(
 	bookingSeriesController.create,
 );
 
+/**
+ * @swagger
+ * /api/get-replacement-classrooms/{seriesId}:
+ *   get:
+ *     summary: Chercher une salle de remplacement pour une occurrence en échec
+ *     description: |
+ *       Renvoie les autres salles libres sur le créneau de la série (heure de Paris) à la date demandée,
+ *       c'est-à-dire ni réservées ni désactivées, même partiellement.
+ *       Seules les salles qui ont au moins autant de places que la salle principale sont proposées,
+ *       et la salle principale est exclue.
+ *       Tri par proximité : même étage, puis même bâtiment, puis les autres ; à proximité égale, par nom.
+ *       Réservé à l'auteur de la série et aux administrateurs.
+ *     tags:
+ *       - Bookings
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: seriesId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: L'ID de la série
+ *         example: 1
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date de l'occurrence en échec (AAAA-MM-JJ). Elle doit tomber le jour de la série, dans sa plage de semaines, et ne pas avoir commencé.
+ *         example: "2026-11-10"
+ *     responses:
+ *       200:
+ *         description: Salles libres, de la plus proche à la plus éloignée (liste vide si aucune salle n'est libre)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 classrooms:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       capacity:
+ *                         type: integer
+ *                       floor:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                           level:
+ *                             type: integer
+ *                           building:
+ *                             $ref: '#/components/schemas/Building'
+ *       400:
+ *         description: Paramètres invalides, ou date qui n'est pas une occurrence à venir de la série
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 error:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Non authentifié (Token JWT manquant ou invalide)
+ *       403:
+ *         description: Rôle non autorisé, ou utilisateur qui n'est ni l'auteur de la série ni administrateur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Série introuvable
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ */
+router.get(
+	"/get-replacement-classrooms/:seriesId",
+	authenticate,
+	authorizeRole(["teacher", "admin"]),
+	bookingSeriesController.getReplacementClassrooms,
+);
+
 export default router;
