@@ -80,6 +80,31 @@ La réponse (201) est le rapport de série : la série enregistrée, les réserv
 
 Les dates de la réponse sont en UTC (le `Z` à la fin) : `09:00Z` correspond à 10h à Paris en hiver.
 
+**Salle de remplacement :** pour une occurrence en échec, la route `GET /api/get-replacement-classrooms/:seriesId?date=AAAA-MM-JJ` propose d'autres salles sur le même créneau.
+
+- Seules les salles libres (ni réservées, ni désactivées) et au moins aussi grandes que la salle principale sont proposées. La salle principale n'est pas dans la liste.
+- Les salles sont triées par proximité : même étage, puis même bâtiment, puis les autres. À proximité égale, elles sont triées par nom.
+- La date doit être une occurrence à venir de la série : le bon jour de la semaine, dans la plage de semaines. Sinon, erreur 400.
+- Seuls l'auteur de la série et un administrateur peuvent faire la recherche (403 sinon, 404 si la série n'existe pas).
+
+**Exemple :** pour l'occurrence du mardi 10 novembre en échec ci-dessus, la salle principale ayant 25 places.
+
+```
+GET /api/get-replacement-classrooms/1?date=2026-11-10
+```
+
+```json
+{
+  "classrooms": [
+    { "id": 4, "name": "A101", "capacity": 30, "floor": { "id": 1, "level": 1, "building": { "id": 1, "name": "Bâtiment A" } } },
+    { "id": 6, "name": "A201", "capacity": 30, "floor": { "id": 2, "level": 2, "building": { "id": 1, "name": "Bâtiment A" } } },
+    { "id": 8, "name": "B101", "capacity": 35, "floor": { "id": 3, "level": 1, "building": { "id": 2, "name": "Bâtiment B" } } }
+  ]
+}
+```
+
+Une liste vide signifie qu'aucune salle ne convient sur ce créneau.
+
 Le vocabulaire (Série, Occurrence, Bénéficiaire…) est défini dans [GLOSSARY.md](GLOSSARY.md), et les choix de conception sont expliqués dans [l'ADR 0001](docs/adr/0001-serie-de-reservations.md).
 
 ### Modèle de Données
