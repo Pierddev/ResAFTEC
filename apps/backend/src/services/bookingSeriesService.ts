@@ -1,4 +1,4 @@
-import { LessThan, MoreThan } from "typeorm";
+import { LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import type { createBookingSeriesDto } from "../dtos/createBookingSeries.dto.js";
 import { Booking } from "../entity/Booking.entity.js";
@@ -7,6 +7,7 @@ import { Classroom } from "../entity/Classroom.entity.js";
 import { ClassroomDisablement } from "../entity/ClassroomDisablement.entity.js";
 import { User } from "../entity/User.entity.js";
 import {
+	computeOccurrenceOnDate,
 	computeOccurrences,
 	type Occurrence,
 } from "../utils/computeOccurrences.js";
@@ -20,6 +21,24 @@ export type FailureReason = "already_booked" | "disabled";
 export interface FailedOccurrence {
 	date: Date;
 	reason: FailureReason;
+}
+
+/**
+ * Indique à quelle distance une salle se trouve de la salle principale.
+ * Plus le nombre est petit, plus la salle est proche.
+ *
+ * @param classroom - la salle à classer (avec son étage et son bâtiment)
+ * @param mainClassroom - la salle principale de la série
+ * @returns 0 = même étage, 1 = même bâtiment, 2 = autre bâtiment
+ */
+function getDistance(classroom: Classroom, mainClassroom: Classroom): number {
+	if (classroom.floor.id === mainClassroom.floor.id) {
+		return 0;
+	}
+	if (classroom.floor.building.id === mainClassroom.floor.building.id) {
+		return 1;
+	}
+	return 2;
 }
 
 export class BookingSeriesService {
@@ -126,5 +145,83 @@ export class BookingSeriesService {
 
 			return { series, booked, failed };
 		});
+	}
+
+	/**
+	 * Récupère une série avec son auteur et sa salle principale
+	 * (avec l'étage et le bâtiment de la salle).
+	 *
+	 * @param seriesId - l'identifiant de la série
+	 * @returns la série, ou null si elle n'existe pas
+	 */
+	async findById(seriesId: number): Promise<BookingSeries | null> {
+		const seriesRepository = AppDataSource.getRepository(BookingSeries);
+		return await seriesRepository.findOne({
+			where: { id: seriesId },
+			relations: { user: true, classroom: { floor: { building: true } } },
+		});
+	}
+
+	/**
+	 * Cherche les salles de remplacement d'une série à une date donnée :
+	 * les autres salles libres sur le même créneau, au moins aussi grandes
+	 * que la salle principale, de la plus proche à la plus éloignée.
+	 * Lance une erreur si la date n'est pas une occurrence à venir de la série.
+	 *
+	 * @param series - la série, chargée avec findById
+	 * @param date - la date de l'occurrence en échec, ex. : "2026-11-10"
+	 * @returns les salles libres, triées par proximité puis par nom
+	 */
+	async getReplacementClassrooms(
+		series: BookingSeries,
+		date: string,
+	): Promise<Classroom[]> {
+		const mainClassroom = series.classroom;
+
+		// 1. Calcule le créneau de la série ce jour-là, à l'heure de Paris
+		const occurrence = computeOccurrenceOnDate(
+			{
+				startDate: series.start_date,
+				endDate: series.end_date,
+				dayOfWeek: series.day_of_week,
+				startTime: series.start_time,
+				endTime: series.end_time,
+			},
+			date,
+			new Date(),
+		);
+
+		// 2. Récupère les salles au moins aussi grandes que la salle principale
+		const classroomRepository = AppDataSource.getRepository(Classroom);
+		const bigEnoughClassrooms = await classroomRepository.find({
+			where: { capacity: MoreThanOrEqual(mainClassroom.capacity) },
+			relations: { floor: { building: true } },
+		});
+
+		// 3. Garde seulement les salles libres sur ce créneau,
+		// sauf la salle principale (c'est elle qui n'est pas disponible)
+		const freeClassrooms: Classroom[] = [];
+		for (const classroom of bigEnoughClassrooms) {
+			if (classroom.id === mainClassroom.id) {
+				continue;
+			}
+			const reason = await this.getFailureReason(classroom.id, occurrence);
+			if (reason === null) {
+				freeClassrooms.push(classroom);
+			}
+		}
+
+		// 4. Trie de la plus proche à la plus éloignée.
+		// À distance égale, on trie par nom (ex. : "B102" avant "B103").
+		freeClassrooms.sort((a, b) => {
+			const distanceA = getDistance(a, mainClassroom);
+			const distanceB = getDistance(b, mainClassroom);
+			if (distanceA !== distanceB) {
+				return distanceA - distanceB;
+			}
+			return a.name.localeCompare(b.name);
+		});
+
+		return freeClassrooms;
 	}
 }
