@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 import { UserController } from "../controllers/userController.js";
 import { authenticate } from "../middleware/authenticate.js";
+import { authorizeRole } from "../middleware/authorizeRole.js";
 import { basicAuth } from "../middleware/basicAuth.js";
 
 // Routeur des routes d'administration (préfixe /admin)
@@ -68,9 +69,27 @@ adminRouter.get("/basic", basicAuth, (_req: Request, res: Response) => {
  *                     $ref: '#/components/schemas/User'
  *       401:
  *         description: Non authentifié (Token JWT manquant ou invalide)
+ *       403:
+ *         description: Rôle non autorisé (l'utilisateur n'est pas administrateur)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Accès refusé
  *       500:
  *         description: Erreur interne du serveur
  */
-adminRouter.get("/users", authenticate, userController.getAll);
+// authenticate vérifie seulement que la personne est connectée.
+// authorizeRole(["admin"]) vérifie en plus son rôle : sans lui,
+// un étudiant connecté recevrait la liste de tous les utilisateurs.
+adminRouter.get(
+	"/users",
+	authenticate,
+	authorizeRole(["admin"]),
+	userController.getAll,
+);
 
 export default adminRouter;
