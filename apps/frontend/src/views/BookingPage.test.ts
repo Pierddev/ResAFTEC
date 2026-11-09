@@ -30,9 +30,14 @@ vi.mock("@/services/classroomService", () => ({
 	},
 }));
 
-// create() ne contacte pas le backend : on choisit sa réponse dans chaque test
+// create() ne contacte pas le backend : on choisit sa réponse dans chaque test.
+// getReplacementClassrooms() est appelée par le composant des dates en échec :
+// ici, aucune salle de remplacement n'est libre (voir ReplacementClassroomsForm.test.ts).
 vi.mock("@/services/bookingSeriesService", () => ({
-	bookingSeriesService: { create: vi.fn() },
+	bookingSeriesService: {
+		create: vi.fn(),
+		getReplacementClassrooms: vi.fn().mockResolvedValue([]),
+	},
 }));
 
 // Le store renvoie toujours le même objet : chaque test choisit la personne connectée
