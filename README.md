@@ -47,7 +47,7 @@ Un formateur ou un administrateur peut réserver la même salle **chaque semaine
 - Les occurrences déjà commencées sont ignorées.
 - Une occurrence est **en échec** si, sur ce créneau, la salle est déjà réservée (`already_booked`) ou désactivée (`disabled`), même partiellement.
 - Les occurrences libres sont réservées en une seule transaction. La série est enregistrée même si toutes ses occurrences sont en échec.
-- Un formateur ne peut réserver que pour lui-même ; un administrateur peut choisir le bénéficiaire. Un étudiant reçoit une erreur 403.
+- Un formateur ne peut réserver que pour lui-même, et pas le dimanche (erreur 403) ; un administrateur peut choisir le bénéficiaire et réserver le dimanche. Un étudiant reçoit une erreur 403.
 
 **Exemple :** chaque mardi de 10h à 12h, du lundi 2 novembre au dimanche 13 décembre 2026.
 
@@ -79,6 +79,14 @@ La réponse (201) est le rapport de série : la série enregistrée, les réserv
 ```
 
 Les dates de la réponse sont en UTC (le `Z` à la fin) : `09:00Z` correspond à 10h à Paris en hiver.
+
+**Depuis la page « Réservation de Salles » :** le formateur choisit la salle dans les filtres, puis coche « Répéter chaque semaine » dans la carte « Nouvelle réservation ».
+
+- Les semaines se choisissent par leur numéro ISO et leur année. Les semaines de début et de fin démarrent à la semaine actuelle, et la page affiche le lundi et le dimanche de chacune (ex. : `S12-2027 : du 22/03 au 28/03`).
+- Les boutons + et − passent d'une année à l'autre (S53-2026 → S1-2027). On ne peut pas choisir une semaine passée, et la semaine de fin suit la semaine de début si elle se retrouve avant.
+- Les heures se choisissent dans une liste, de 07:00 à 22:00 par quart d'heure. Le dimanche n'est proposé qu'aux administrateurs.
+- La page envoie le lundi de la semaine de début et le dimanche de la semaine de fin, puis affiche le rapport de série : une confirmation si toutes les dates sont réservées, sinon chaque date en échec avec son motif (« déjà réservée » ou « salle désactivée »).
+- Le bénéficiaire est toujours la personne connectée : choisir un autre bénéficiaire n'est possible que par l'API.
 
 **Salle de remplacement :** pour une occurrence en échec, la route `GET /api/get-replacement-classrooms/:seriesId?date=AAAA-MM-JJ` propose d'autres salles sur le même créneau.
 
