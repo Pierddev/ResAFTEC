@@ -371,4 +371,136 @@ router.get(
 	bookingSeriesController.getReplacementClassrooms,
 );
 
+/**
+ * @swagger
+ * /api/add-booking-series-occurrences/{seriesId}:
+ *   post:
+ *     summary: Réserver les occurrences en échec d'une série
+ *     description: |
+ *       Réserve des occurrences en échec d'une série, chacune dans la salle choisie (souvent une salle de remplacement).
+ *       Le titre, le bénéficiaire et le créneau (heure de Paris) sont repris de la série.
+ *       Chaque réservation obtenue est rattachée à la série, même si sa salle n'est pas la salle principale.
+ *       Mêmes vérifications que pour créer une série : une occurrence qui chevauche une réservation
+ *       ou une désactivation de la salle choisie est renvoyée dans `failed` (la salle a pu être prise entre-temps).
+ *       Les réservations libres sont enregistrées en une seule transaction.
+ *       Si une date n'est pas une occurrence à venir de la série ou si une salle n'existe pas, rien n'est réservé (400).
+ *       Réservé à l'auteur de la série et aux administrateurs.
+ *     tags:
+ *       - Bookings
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: seriesId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: L'ID de la série
+ *         example: 1
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             minItems: 1
+ *             maxItems: 52
+ *             description: Les occurrences à réserver, une seule fois chaque date
+ *             items:
+ *               type: object
+ *               required:
+ *                 - date
+ *                 - classroomId
+ *               properties:
+ *                 date:
+ *                   type: string
+ *                   format: date
+ *                   description: Date de l'occurrence (AAAA-MM-JJ). Elle doit tomber le jour de la série, dans sa plage de semaines, et ne pas avoir commencé.
+ *                 classroomId:
+ *                   type: integer
+ *                   description: L'ID de la salle choisie pour cette date
+ *             example:
+ *               - date: "2026-11-10"
+ *                 classroomId: 4
+ *               - date: "2026-11-17"
+ *                 classroomId: 6
+ *     responses:
+ *       201:
+ *         description: Rapport de série, au même format que pour la création
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 series:
+ *                   $ref: '#/components/schemas/BookingSeries'
+ *                 booked:
+ *                   type: array
+ *                   description: Les réservations obtenues
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       start_at:
+ *                         type: string
+ *                         format: date-time
+ *                       end_at:
+ *                         type: string
+ *                         format: date-time
+ *                 failed:
+ *                   type: array
+ *                   description: Les occurrences encore en échec, avec leur motif
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       date:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Date et heure de début de l'occurrence
+ *                       reason:
+ *                         type: string
+ *                         enum: [already_booked, disabled]
+ *                         description: already_booked = salle déjà réservée, disabled = salle désactivée
+ *       400:
+ *         description: Données invalides, date qui n'est pas une occurrence à venir de la série, ou salle inexistante
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 error:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Non authentifié (Token JWT manquant ou invalide)
+ *       403:
+ *         description: Rôle non autorisé, ou utilisateur qui n'est ni l'auteur de la série ni administrateur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Série introuvable
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ */
+router.post(
+	"/add-booking-series-occurrences/:seriesId",
+	authenticate,
+	authorizeRole(["teacher", "admin"]),
+	bookingSeriesController.addOccurrences,
+);
+
 export default router;
