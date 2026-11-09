@@ -47,15 +47,42 @@ const report: BookingSeriesReport = {
 	],
 };
 
+// Le même rapport, avec un troisième mardi en échec
+const reportWithThreeDates: BookingSeriesReport = {
+	...report,
+	failed: [
+		...report.failed,
+		{ date: "2027-04-13T08:00:00.000Z", reason: "already_booked" },
+	],
+};
+
 /**
- * Affiche le composant avec le rapport, puis attend la fin de la recherche des salles.
+ * Affiche le composant avec un rapport, puis attend la fin de la recherche des salles.
  *
+ * @param seriesReport - le rapport de série (deux dates en échec si on ne le précise pas)
  * @returns le composant affiché, pour vérifier ce qu'il contient
  */
-async function mountForm() {
-	const wrapper = mount(ReplacementClassroomsForm, { props: { report } });
+async function mountForm(seriesReport = report) {
+	const wrapper = mount(ReplacementClassroomsForm, {
+		props: { report: seriesReport },
+	});
 	await flushPromises();
 	return wrapper;
+}
+
+/**
+ * Donne le texte de la salle choisie dans une liste.
+ *
+ * @param wrapper - le composant affiché par mountForm
+ * @param selector - la liste, ex. : "#replacement_0" pour la première date
+ * @returns le texte de l'option choisie, ex. : "Ne pas réserver cette date"
+ */
+function getSelectedText(
+	wrapper: Awaited<ReturnType<typeof mountForm>>,
+	selector: string,
+): string {
+	// option:checked = l'option sélectionnée dans la liste
+	return wrapper.find(`${selector} option:checked`).text();
 }
 
 /**
@@ -126,8 +153,7 @@ describe("ReplacementClassroomsForm", () => {
 			"Ne pas réserver cette date",
 			"B101 – 35 places, Bâtiment B, étage 1",
 		]);
-		// option:checked = l'option sélectionnée dans la liste
-		expect(wrapper.find("#replacement_0 option:checked").text()).toBe(
+		expect(getSelectedText(wrapper, "#replacement_0")).toBe(
 			"Ne pas réserver cette date",
 		);
 	});
@@ -155,5 +181,61 @@ describe("ReplacementClassroomsForm", () => {
 		expect(wrapper.text()).toContain("Cette occurrence a déjà commencé");
 		expect(wrapper.find("#replacement_0").exists()).toBe(false);
 		expect(wrapper.find("#replacement_1").exists()).toBe(true);
+	});
+
+	describe("raccourci « Appliquer cette salle aux autres dates »", () => {
+		it("affiche le bouton quand la salle choisie est libre à une autre date", async () => {
+			// A201 est libre aux deux dates
+			getReplacementClassrooms
+				.mockResolvedValueOnce([a201, b101])
+				.mockResolvedValueOnce([a201]);
+			const wrapper = await mountForm();
+
+			// Aucune salle choisie : pas de bouton
+			expect(wrapper.find("#apply_0").exists()).toBe(false);
+
+			// setValue() choisit l'option dont la valeur est l'id de la salle (6 = A201)
+			await wrapper.find("#replacement_0").setValue(6);
+
+			expect(wrapper.find("#apply_0").text()).toBe(
+				"Appliquer cette salle aux autres dates",
+			);
+		});
+
+		it("n'affiche pas le bouton si la salle choisie n'est libre à aucune autre date", async () => {
+			// A201 n'est libre qu'à la première date
+			getReplacementClassrooms
+				.mockResolvedValueOnce([a201, b101])
+				.mockResolvedValueOnce([b101]);
+			const wrapper = await mountForm();
+
+			await wrapper.find("#replacement_0").setValue(6);
+
+			expect(wrapper.find("#apply_0").exists()).toBe(false);
+		});
+
+		it("choisit la salle aux autres dates où elle est libre, et ne touche pas aux autres", async () => {
+			// 1re date : A201 ou B101 ; 2e date : B101 ou A201 ; 3e date : B101 seulement
+			getReplacementClassrooms
+				.mockResolvedValueOnce([a201, b101])
+				.mockResolvedValueOnce([b101, a201])
+				.mockResolvedValueOnce([b101]);
+			const wrapper = await mountForm(reportWithThreeDates);
+
+			// Le formateur choisit B101 aux 2e et 3e dates (8 = B101), puis A201 à la 1re
+			await wrapper.find("#replacement_1").setValue(8);
+			await wrapper.find("#replacement_2").setValue(8);
+			await wrapper.find("#replacement_0").setValue(6);
+			await wrapper.find("#apply_0").trigger("click");
+
+			// 2e date : A201 remplace B101, car A201 y est libre
+			expect(getSelectedText(wrapper, "#replacement_1")).toBe(
+				"A201 – 30 places, Bâtiment A, étage 2",
+			);
+			// 3e date : A201 n'y est pas libre, B101 reste choisie
+			expect(getSelectedText(wrapper, "#replacement_2")).toBe(
+				"B101 – 35 places, Bâtiment B, étage 1",
+			);
+		});
 	});
 });

@@ -99,6 +99,59 @@ async function loadReplacementClassrooms() {
 	isLoading.value = false;
 }
 
+/**
+ * Indique si une salle fait partie des salles libres d'une date.
+ *
+ * @param row - la ligne de la date
+ * @param classroomId - l'id de la salle cherchée
+ * @returns true si la salle est libre ce jour-là
+ */
+function isClassroomFree(row: FailedDateRow, classroomId: number): boolean {
+	// some() renvoie true dès qu'une salle de la liste a cet id
+	return row.classrooms.some((classroom) => classroom.id === classroomId);
+}
+
+/**
+ * Indique si la salle choisie pour une date est aussi libre à une autre date en échec.
+ * Sert à afficher le bouton « Appliquer cette salle aux autres dates ».
+ *
+ * @param row - la ligne de la date
+ * @returns true si une salle est choisie et qu'elle est libre à au moins une autre date
+ */
+function isFreeOnOtherDates(row: FailedDateRow): boolean {
+	const classroomId = row.selectedClassroomId;
+	if (classroomId === null) {
+		return false;
+	}
+
+	for (const otherRow of rows.value) {
+		if (otherRow.date !== row.date && isClassroomFree(otherRow, classroomId)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Choisit la salle d'une date pour toutes les autres dates où elle est libre,
+ * même si une autre salle y était déjà choisie.
+ * Les dates où elle n'est pas libre gardent leur choix.
+ *
+ * @param row - la ligne de la date dont on recopie la salle
+ */
+function applyToOtherDates(row: FailedDateRow) {
+	const classroomId = row.selectedClassroomId;
+	if (classroomId === null) {
+		return;
+	}
+
+	for (const otherRow of rows.value) {
+		if (otherRow.date !== row.date && isClassroomFree(otherRow, classroomId)) {
+			otherRow.selectedClassroomId = classroomId;
+		}
+	}
+}
+
 // onMounted : on cherche les salles dès que le composant est affiché
 onMounted(loadReplacementClassrooms);
 </script>
@@ -132,6 +185,13 @@ onMounted(loadReplacementClassrooms);
                         {{ formatClassroom(classroom) }}
                     </option>
                 </select>
+
+                <!-- Raccourci : seulement si la salle choisie est aussi libre à une autre date.
+                     type="button" : sans lui, le clic enverrait le formulaire de la série
+                     qui contient ce composant. -->
+                <button v-if="isFreeOnOtherDates(row)" :id="`apply_${index}`" type="button" class="w-fit text-sm text-aftec-blue underline cursor-pointer" @click="applyToOtherDates(row)">
+                    Appliquer cette salle aux autres dates
+                </button>
             </div>
         </template>
     </div>
