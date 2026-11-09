@@ -5,7 +5,7 @@ import { DateTime } from "luxon";
 const PARIS_TIME_ZONE = "Europe/Paris";
 
 // Une série ne peut pas durer plus de 52 semaines (environ un an)
-const MAX_WEEKS = 52;
+export const MAX_WEEKS = 52;
 
 // Les informations nécessaires pour calculer les dates d'une série
 export interface SeriesSchedule {
