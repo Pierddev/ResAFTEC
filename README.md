@@ -288,3 +288,11 @@ Les routes protégées lisent le token JWT dans un cookie HttpOnly : dans Swagge
 | `npm run test` | Lance les tests Vitest (mode watch) |
 | `npm run test:run` | Lance les tests Vitest (une seule exécution) |
 | `npm run test:cov` | Lance les tests avec couverture |
+
+---
+
+## 6. Licence
+
+Le code de ce projet est distribué sous licence [MIT](LICENSE).
+
+Le nom et le logo **AFTEC** (`apps/frontend/src/assets/logo/`) appartiennent à leur propriétaire et ne sont pas couverts par cette licence.
