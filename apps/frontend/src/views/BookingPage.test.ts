@@ -1,5 +1,6 @@
 // Tests unitaires de la page de réservation
-// On vérifie le formulaire de série : champs affichés, dates envoyées au backend et erreurs
+// On vérifie le formulaire de série (champs affichés, dates envoyées au backend, erreurs)
+// et le rapport de série affiché après la réponse du backend
 
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -305,5 +306,84 @@ describe("BookingPage - formulaire de série", () => {
 		expect(wrapper.text()).toContain(
 			"Une série ne peut pas dépasser 52 semaines",
 		);
+	});
+});
+
+describe("BookingPage - rapport de série", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		authStore.user = teacher;
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-11-09T10:00:00"));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	/**
+	 * Crée une réservation obtenue (fictive) pour le rapport.
+	 *
+	 * @param id - l'id de la réservation
+	 * @returns la réservation, avec des dates sans importance pour l'affichage
+	 */
+	function bookedOccurrence(id: number) {
+		return {
+			id,
+			start_at: "2027-03-23T09:00:00.000Z",
+			end_at: "2027-03-23T11:00:00.000Z",
+		};
+	}
+
+	it("affiche une confirmation globale quand toutes les dates sont réservées", async () => {
+		vi.mocked(bookingSeriesService.create).mockResolvedValue({
+			series: { id: 1, title: "Cours de TypeScript" },
+			booked: [
+				bookedOccurrence(51),
+				bookedOccurrence(52),
+				bookedOccurrence(53),
+			],
+			failed: [],
+		});
+
+		const wrapper = await mountAndFillForm(12, 14);
+		await submitForm(wrapper);
+
+		expect(wrapper.find("#series_report").text()).toBe(
+			"Toutes les dates de la série sont réservées (3).",
+		);
+	});
+
+	it("affiche chaque date en échec avec son motif, à l'heure de Paris", async () => {
+		vi.mocked(bookingSeriesService.create).mockResolvedValue({
+			series: { id: 1, title: "Cours de TypeScript" },
+			booked: [bookedOccurrence(51)],
+			failed: [
+				// 08:00 UTC = 10h à Paris (heure d'été)
+				{ date: "2027-03-30T08:00:00.000Z", reason: "already_booked" },
+				{ date: "2027-04-06T08:00:00.000Z", reason: "disabled" },
+			],
+		});
+
+		const wrapper = await mountAndFillForm(12, 14);
+		await submitForm(wrapper);
+
+		const reportText = wrapper.find("#series_report").text();
+		expect(reportText).toContain("Dates réservées : 1");
+		expect(reportText).toContain("Dates non réservées : 2");
+		expect(reportText).toContain("mardi 30/03/2027 : déjà réservée");
+		expect(reportText).toContain("mardi 06/04/2027 : salle désactivée");
+		expect(reportText).not.toContain("Toutes les dates");
+	});
+
+	it("n'affiche pas de rapport si le backend refuse la série", async () => {
+		vi.mocked(bookingSeriesService.create).mockRejectedValue({
+			message: "Aucune occurrence à venir dans cette plage de semaines",
+		});
+
+		const wrapper = await mountAndFillForm(12, 14);
+		await submitForm(wrapper);
+
+		expect(wrapper.find("#series_report").exists()).toBe(false);
 	});
 });

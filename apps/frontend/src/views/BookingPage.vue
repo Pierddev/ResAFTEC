@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import api from "@/services/apiService";
-import { bookingSeriesService } from "@/services/bookingSeriesService";
+import {
+	type BookingSeriesReport,
+	bookingSeriesService,
+	type FailureReason,
+} from "@/services/bookingSeriesService";
 import { type Classroom, classroomService } from "@/services/classroomService";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -169,6 +173,32 @@ const errorMessage = ref("");
 // true pendant l'envoi : le bouton est désactivé pour éviter d'envoyer deux fois la série
 const isSending = ref(false);
 
+// Rapport de série renvoyé par le backend (null tant qu'aucune série n'est réservée)
+const report = ref<BookingSeriesReport | null>(null);
+
+// Texte affiché pour chaque motif d'échec renvoyé par l'API
+const failureReasonLabels: Record<FailureReason, string> = {
+	already_booked: "déjà réservée",
+	disabled: "salle désactivée",
+};
+
+/**
+ * Affiche la date d'une occurrence en échec, à l'heure de Paris.
+ *
+ * @param date - le début du cours en UTC, ex. : "2027-03-30T08:00:00.000Z"
+ * @returns le jour et la date, ex. : "mardi 30/03/2027"
+ */
+function formatFailedDate(date: string): string {
+	// timeZone "Europe/Paris" : l'API renvoie l'heure UTC (08:00Z = 10h à Paris en été)
+	return new Date(date).toLocaleDateString("fr-FR", {
+		weekday: "long",
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+		timeZone: "Europe/Paris",
+	});
+}
+
 /**
  * Construit le texte affiché sous une semaine choisie dans le formulaire.
  *
@@ -252,8 +282,9 @@ function onEndWeekChange() {
  * Le backend vérifie aussi les données : s'il refuse, son message est affiché.
  */
 async function submitSeries() {
-	// On efface l'ancien message d'erreur au début de chaque envoi
+	// On efface l'ancien message d'erreur et l'ancien rapport au début de chaque envoi
 	errorMessage.value = "";
+	report.value = null;
 
 	// Sans la case cochée, il n'y a rien à envoyer :
 	// la réservation ponctuelle n'existe pas encore sur cette page
@@ -301,7 +332,8 @@ async function submitSeries() {
 	// 3. Envoi au backend
 	isSending.value = true;
 	try {
-		await bookingSeriesService.create({
+		// On garde le rapport pour l'afficher sous le formulaire
+		report.value = await bookingSeriesService.create({
 			title: title.value,
 			classroomId: selectedClassroom.value,
 			// Le bénéficiaire est la personne connectée.
@@ -434,6 +466,28 @@ async function submitSeries() {
                     <button class="btn-login" type="submit" :disabled="isSending">
                         {{ isSending ? "Réservation en cours..." : "Réserver la série" }}
                     </button>
+
+                    <!-- Rapport de série : affiché après une demande acceptée par le backend -->
+                    <div v-if="report" id="series_report" class="flex flex-col gap-2">
+                        <!-- Tout est réservé : confirmation globale -->
+                        <p v-if="report.failed.length === 0" class="card-success text-sm font-medium">
+                            Toutes les dates de la série sont réservées ({{ report.booked.length }}).
+                        </p>
+                        <!-- Sinon : le nombre de dates obtenues, puis chaque date en échec avec son motif -->
+                        <template v-else>
+                            <p v-if="report.booked.length > 0" class="card-success text-sm font-medium">
+                                Dates réservées : {{ report.booked.length }}
+                            </p>
+                            <div class="card-error text-sm font-medium">
+                                <p>Dates non réservées : {{ report.failed.length }}</p>
+                                <ul class="list-disc pl-5">
+                                    <li v-for="occurrence in report.failed" :key="occurrence.date">
+                                        {{ formatFailedDate(occurrence.date) }} : {{ failureReasonLabels[occurrence.reason] }}
+                                    </li>
+                                </ul>
+                            </div>
+                        </template>
+                    </div>
                 </div>
                 <p v-else class="text-sm text-black/60">
                     La réservation ponctuelle n'est pas encore disponible : cochez « Répéter chaque semaine » pour réserver une série.
