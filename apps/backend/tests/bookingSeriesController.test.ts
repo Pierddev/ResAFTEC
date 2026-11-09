@@ -82,6 +82,39 @@ describe("BookingSeriesController", () => {
 		expect(mockRes.status).toHaveBeenCalledWith(403);
 		expect(mockCreate).not.toHaveBeenCalled();
 	});
+
+	it("should return 403 when a teacher books a series on Sunday", async () => {
+		// dayOfWeek 7 = dimanche
+		const mockReq = {
+			body: { ...validBody, dayOfWeek: 7 },
+			userId: 2,
+			role: "teacher",
+		};
+
+		await controller.create(mockReq as AuthRequest, mockRes as Response);
+
+		expect(mockRes.status).toHaveBeenCalledWith(403);
+		expect(mockRes.json).toHaveBeenCalledWith({
+			message: "Un formateur ne peut pas réserver le dimanche",
+		});
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it("should return 201 when an admin books a series on Sunday", async () => {
+		// L'administrateur (id 1) réserve un dimanche pour l'utilisateur 2
+		const sundayBody = { ...validBody, dayOfWeek: 7 };
+		const mockReq = { body: sundayBody, userId: 1, role: "admin" };
+		mockCreate.mockResolvedValue({
+			series: { id: 11, title: "Cours de TypeScript" },
+			booked: [],
+			failed: [],
+		});
+
+		await controller.create(mockReq as AuthRequest, mockRes as Response);
+
+		expect(mockCreate).toHaveBeenCalledWith(sundayBody, 1);
+		expect(mockRes.status).toHaveBeenCalledWith(201);
+	});
 });
 
 describe("BookingSeriesController.getReplacementClassrooms", () => {

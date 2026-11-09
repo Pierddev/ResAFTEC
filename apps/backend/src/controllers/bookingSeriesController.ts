@@ -50,6 +50,16 @@ export class BookingSeriesController {
 				.json({ message: "Un formateur ne peut réserver que pour lui-même" });
 		}
 
+		// Un formateur ne peut pas réserver le dimanche (7 = dimanche) :
+		// seul un administrateur peut le faire.
+		// Le formulaire du frontend cache déjà ce jour, mais on vérifie aussi ici :
+		// on peut appeler l'API sans passer par le formulaire.
+		if (req.role === "teacher" && seriesData.dayOfWeek === 7) {
+			return res
+				.status(403)
+				.json({ message: "Un formateur ne peut pas réserver le dimanche" });
+		}
+
 		try {
 			const bookingSeriesService = new BookingSeriesService();
 			const report = await bookingSeriesService.create(seriesData, userId);
