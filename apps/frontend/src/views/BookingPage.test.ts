@@ -21,11 +21,12 @@ vi.mock("@/services/apiService", () => ({
 	},
 }));
 
+// L'id de la salle est en texte ("4"), comme dans la vraie réponse de l'API (voir #217)
 vi.mock("@/services/classroomService", () => ({
 	classroomService: {
 		getByFloor: vi
 			.fn()
-			.mockResolvedValue([{ id: 4, name: "C101", capacity: 20 }]),
+			.mockResolvedValue([{ id: "4", name: "C101", capacity: 20 }]),
 	},
 }));
 
@@ -283,6 +284,23 @@ describe("BookingPage - formulaire de série", () => {
 			startDate: "2027-03-22",
 			endDate: "2027-05-23",
 		});
+	});
+
+	it("envoie l'id de la salle en nombre, même si l'API le donne en texte", async () => {
+		vi.mocked(bookingSeriesService.create).mockResolvedValue({
+			series: { id: 1, title: "Cours de TypeScript" },
+			booked: [],
+			failed: [],
+		});
+
+		const wrapper = await mountAndFillForm(12, 20);
+		await submitForm(wrapper);
+
+		// La liste des salles contient l'id "4" (texte) : le backend attend 4 (nombre).
+		// expect.objectContaining() vérifie seulement les champs qu'on lui donne.
+		expect(bookingSeriesService.create).toHaveBeenCalledWith(
+			expect.objectContaining({ classroomId: 4 }),
+		);
 	});
 
 	it("refuse une semaine de fin avant la semaine de début", async () => {

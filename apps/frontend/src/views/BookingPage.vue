@@ -335,7 +335,9 @@ async function submitSeries() {
 		// On garde le rapport pour l'afficher sous le formulaire
 		report.value = await bookingSeriesService.create({
 			title: title.value,
-			classroomId: selectedClassroom.value,
+			// Number() : l'API renvoie pour l'instant les id en texte ("4"), voir #217.
+			// Sans Number(), le backend refuse la série : il attend un nombre.
+			classroomId: Number(selectedClassroom.value),
 			// Le bénéficiaire est la personne connectée.
 			// Number() : l'API renvoie pour l'instant les id en texte ("2"), voir #217
 			reservedForUserId: Number(authStore.user?.id),
