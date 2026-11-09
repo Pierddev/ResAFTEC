@@ -1,5 +1,6 @@
 import { LessThan, MoreThan, MoreThanOrEqual } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
+import type { occurrenceToBookDto } from "../dtos/addBookingSeriesOccurrences.dto.js";
 import type { createBookingSeriesDto } from "../dtos/createBookingSeries.dto.js";
 import { Booking } from "../entity/Booking.entity.js";
 import { BookingSeries } from "../entity/BookingSeries.entity.js";
@@ -10,6 +11,7 @@ import {
 	computeOccurrenceOnDate,
 	computeOccurrences,
 	type Occurrence,
+	type SeriesSchedule,
 } from "../utils/computeOccurrences.js";
 
 // Motif d'une occurrence en échec :
@@ -21,6 +23,29 @@ export type FailureReason = "already_booked" | "disabled";
 export interface FailedOccurrence {
 	date: Date;
 	reason: FailureReason;
+}
+
+// Occurrence libre, avec la salle dans laquelle on va la réserver
+interface FreeOccurrence {
+	classroomId: number;
+	occurrence: Occurrence;
+}
+
+/**
+ * Rassemble les informations d'une série dont computeOccurrenceOnDate
+ * a besoin : jour de la semaine, heures et plage de semaines.
+ *
+ * @param series - la série enregistrée en base
+ * @returns le jour, les heures et la plage de semaines de la série
+ */
+function getSchedule(series: BookingSeries): SeriesSchedule {
+	return {
+		startDate: series.start_date,
+		endDate: series.end_date,
+		dayOfWeek: series.day_of_week,
+		startTime: series.start_time,
+		endTime: series.end_time,
+	};
 }
 
 /**
@@ -148,8 +173,8 @@ export class BookingSeriesService {
 	}
 
 	/**
-	 * Récupère une série avec son auteur et sa salle principale
-	 * (avec l'étage et le bâtiment de la salle).
+	 * Récupère une série avec son auteur, son bénéficiaire et sa salle
+	 * principale (avec l'étage et le bâtiment de la salle).
 	 *
 	 * @param seriesId - l'identifiant de la série
 	 * @returns la série, ou null si elle n'existe pas
@@ -158,7 +183,11 @@ export class BookingSeriesService {
 		const seriesRepository = AppDataSource.getRepository(BookingSeries);
 		return await seriesRepository.findOne({
 			where: { id: seriesId },
-			relations: { user: true, classroom: { floor: { building: true } } },
+			relations: {
+				user: true,
+				reservedForUser: true,
+				classroom: { floor: { building: true } },
+			},
 		});
 	}
 
@@ -180,13 +209,7 @@ export class BookingSeriesService {
 
 		// 1. Calcule le créneau de la série ce jour-là, à l'heure de Paris
 		const occurrence = computeOccurrenceOnDate(
-			{
-				startDate: series.start_date,
-				endDate: series.end_date,
-				dayOfWeek: series.day_of_week,
-				startTime: series.start_time,
-				endTime: series.end_time,
-			},
+			getSchedule(series),
 			date,
 			new Date(),
 		);
@@ -223,5 +246,90 @@ export class BookingSeriesService {
 		});
 
 		return freeClassrooms;
+	}
+
+	/**
+	 * Réserve des occurrences en échec d'une série, chacune dans la salle
+	 * choisie (souvent une salle de remplacement).
+	 * Le titre, le bénéficiaire et le créneau sont repris de la série,
+	 * et chaque réservation obtenue est rattachée à la série.
+	 * Lance une erreur, sans rien réserver, si une date n'est pas une
+	 * occurrence à venir de la série ou si une salle n'existe pas.
+	 *
+	 * @param series - la série, chargée avec findById
+	 * @param occurrencesToBook - les dates à réserver, avec la salle choisie pour chacune
+	 * @param userId - l'ID de la personne connectée, auteur des réservations
+	 * @returns le rapport : la série, les réservations obtenues et les occurrences en échec
+	 */
+	async addOccurrences(
+		series: BookingSeries,
+		occurrencesToBook: occurrenceToBookDto[],
+		userId: number,
+	) {
+		const classroomRepository = AppDataSource.getRepository(Classroom);
+		const schedule = getSchedule(series);
+		const now = new Date();
+
+		// 1. Vérifie chaque date : libres d'un côté, en échec de l'autre
+		const freeOccurrences: FreeOccurrence[] = [];
+		const failed: FailedOccurrence[] = [];
+
+		for (const occurrenceToBook of occurrencesToBook) {
+			// Calcule le créneau de la série ce jour-là, à l'heure de Paris.
+			// Lance une erreur si la date n'est pas une occurrence à venir de la série.
+			const occurrence = computeOccurrenceOnDate(
+				schedule,
+				occurrenceToBook.date,
+				now,
+			);
+
+			const classroom = await classroomRepository.findOneBy({
+				id: occurrenceToBook.classroomId,
+			});
+			if (!classroom) {
+				throw new Error(
+					`La salle ${occurrenceToBook.classroomId} n'existe pas.`,
+				);
+			}
+
+			// Mêmes vérifications que pour créer la série : réservation ou désactivation.
+			// La salle de remplacement a pu être prise entre-temps.
+			const reason = await this.getFailureReason(
+				occurrenceToBook.classroomId,
+				occurrence,
+			);
+			if (reason === null) {
+				freeOccurrences.push({
+					classroomId: occurrenceToBook.classroomId,
+					occurrence: occurrence,
+				});
+			} else {
+				failed.push({ date: occurrence.start_at, reason });
+			}
+		}
+
+		// 2. Enregistre les réservations dans une transaction :
+		// si une seule sauvegarde échoue, rien n'est enregistré.
+		return await AppDataSource.transaction(async (manager) => {
+			const bookingRepository = manager.getRepository(Booking);
+
+			const booked = freeOccurrences.map((freeOccurrence) =>
+				bookingRepository.create({
+					title: series.title,
+					user: { id: userId },
+					reservedForUser: { id: series.reservedForUser.id },
+					// La salle choisie, même si ce n'est pas la salle principale
+					classroom: { id: freeOccurrence.classroomId },
+					// Rattache la réservation à la série (seul l'ID est utile)
+					series: { id: series.id },
+					created_at: new Date(),
+					start_at: freeOccurrence.occurrence.start_at,
+					end_at: freeOccurrence.occurrence.end_at,
+				}),
+			);
+			await bookingRepository.save(booked);
+
+			return { series, booked, failed };
+		});
 	}
 }

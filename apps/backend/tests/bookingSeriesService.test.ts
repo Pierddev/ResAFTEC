@@ -137,7 +137,7 @@ describe("BookingSeriesService - salles de remplacement", () => {
 		jest.useRealTimers();
 	});
 
-	it("should find a series with its author and its main classroom", async () => {
+	it("should find a series with its author, its beneficiary and its main classroom", async () => {
 		mockRepository.findOne.mockResolvedValue(series);
 
 		const result = await bookingSeriesService.findById(7);
@@ -145,7 +145,11 @@ describe("BookingSeriesService - salles de remplacement", () => {
 		expect(result).toBe(series);
 		expect(mockRepository.findOne).toHaveBeenCalledWith({
 			where: { id: 7 },
-			relations: { user: true, classroom: { floor: { building: true } } },
+			relations: {
+				user: true,
+				reservedForUser: true,
+				classroom: { floor: { building: true } },
+			},
 		});
 	});
 
@@ -213,5 +217,135 @@ describe("BookingSeriesService - salles de remplacement", () => {
 
 		// Aucune salle n'est cherchée
 		expect(mockRepository.find).not.toHaveBeenCalled();
+	});
+});
+
+describe("BookingSeriesService - réserver les occurrences en échec", () => {
+	let bookingSeriesService: BookingSeriesServiceType;
+
+	// Série créée par l'utilisateur 2 pour le bénéficiaire 3.
+	// Chaque mardi de 10h à 12h, du 19 octobre au 8 novembre 2026.
+	const series = {
+		id: 7,
+		title: "Cours de TypeScript",
+		user: { id: 2 },
+		reservedForUser: { id: 3 },
+		classroom: { id: 1 },
+		day_of_week: 2,
+		start_time: "10:00:00",
+		end_time: "12:00:00",
+		start_date: "2026-10-19",
+		end_date: "2026-11-08",
+	} as unknown as BookingSeries;
+
+	beforeEach(() => {
+		bookingSeriesService = new BookingSeriesService();
+		jest.clearAllMocks();
+		// mockReset efface aussi les réponses programmées par les tests précédents
+		mockRepository.findOneBy.mockReset();
+		mockRepository.findOne.mockReset();
+		jest.useFakeTimers({ now: new Date("2026-01-01T00:00:00Z") });
+
+		// Par défaut : les salles existent...
+		mockRepository.findOneBy.mockResolvedValue({ id: 4 });
+		// ... et elles sont libres (ni réservation, ni désactivation)
+		mockRepository.findOne.mockResolvedValue(null);
+	});
+
+	afterEach(() => {
+		jest.useRealTimers();
+	});
+
+	it("should book each occurrence in its chosen classroom and attach it to the series", async () => {
+		// L'administrateur (id 1) réserve deux dates dans deux salles de remplacement
+		const result = await bookingSeriesService.addOccurrences(
+			series,
+			[
+				{ date: "2026-10-27", classroomId: 4 },
+				{ date: "2026-11-03", classroomId: 6 },
+			],
+			1,
+		);
+
+		// Titre et bénéficiaire viennent de la série, l'auteur est la personne connectée.
+		// 10h-12h à Paris = 9h-11h UTC (heure d'hiver depuis le 25 octobre).
+		expect(result.booked).toEqual([
+			{
+				title: "Cours de TypeScript",
+				user: { id: 1 },
+				reservedForUser: { id: 3 },
+				classroom: { id: 4 },
+				series: { id: 7 },
+				created_at: expect.any(Date),
+				start_at: new Date("2026-10-27T09:00:00Z"),
+				end_at: new Date("2026-10-27T11:00:00Z"),
+			},
+			{
+				title: "Cours de TypeScript",
+				user: { id: 1 },
+				reservedForUser: { id: 3 },
+				classroom: { id: 6 },
+				series: { id: 7 },
+				created_at: expect.any(Date),
+				start_at: new Date("2026-11-03T09:00:00Z"),
+				end_at: new Date("2026-11-03T11:00:00Z"),
+			},
+		]);
+		expect(result.failed).toEqual([]);
+		expect(mockRepository.save).toHaveBeenCalledWith(result.booked);
+	});
+
+	it("should report an occurrence whose classroom was taken in the meantime", async () => {
+		mockRepository.findOne
+			// 27 octobre : ni réservation, ni désactivation → libre
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce(null)
+			// 3 novembre : quelqu'un a réservé la salle entre-temps
+			.mockResolvedValueOnce({ id: 99 });
+
+		const result = await bookingSeriesService.addOccurrences(
+			series,
+			[
+				{ date: "2026-10-27", classroomId: 4 },
+				{ date: "2026-11-03", classroomId: 6 },
+			],
+			2,
+		);
+
+		expect(result.booked).toHaveLength(1);
+		expect(result.failed).toEqual([
+			{ date: new Date("2026-11-03T09:00:00Z"), reason: "already_booked" },
+		]);
+	});
+
+	it("should reject a date that is not an occurrence of the series, without booking anything", async () => {
+		// Le 4 novembre est un mercredi, la série a lieu le mardi
+		await expect(
+			bookingSeriesService.addOccurrences(
+				series,
+				[
+					{ date: "2026-10-27", classroomId: 4 },
+					{ date: "2026-11-04", classroomId: 6 },
+				],
+				2,
+			),
+		).rejects.toThrow("La date ne tombe pas le jour de la série");
+
+		// Même le 27 octobre, qui était valide, n'est pas réservé
+		expect(mockRepository.save).not.toHaveBeenCalled();
+	});
+
+	it("should reject a classroom that does not exist, without booking anything", async () => {
+		mockRepository.findOneBy.mockResolvedValue(null);
+
+		await expect(
+			bookingSeriesService.addOccurrences(
+				series,
+				[{ date: "2026-10-27", classroomId: 99 }],
+				2,
+			),
+		).rejects.toThrow("La salle 99 n'existe pas.");
+
+		expect(mockRepository.save).not.toHaveBeenCalled();
 	});
 });
