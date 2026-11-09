@@ -40,6 +40,33 @@ export interface BookingSeriesReport {
 	failed: FailedOccurrence[];
 }
 
+// Salle de remplacement proposée pour une occurrence en échec,
+// avec son étage et son bâtiment pour savoir où elle se trouve
+export interface ReplacementClassroom {
+	id: number;
+	name: string;
+	capacity: number;
+	floor: {
+		id: number;
+		level: number;
+		building: {
+			id: number;
+			name: string;
+		};
+	};
+}
+
+// Réponse du backend à la recherche de salles de remplacement
+interface GetReplacementClassroomsResponse {
+	classrooms: ReplacementClassroom[];
+}
+
+// Occurrence en échec à réserver, avec la salle choisie pour ce jour-là
+export interface OccurrenceToBook {
+	date: string; // date du cours à Paris, ex. : "2027-03-30"
+	classroomId: number;
+}
+
 export const bookingSeriesService = {
 	/**
 	 * Crée une série de réservations : le backend réserve chaque occurrence libre
@@ -52,6 +79,46 @@ export const bookingSeriesService = {
 		const response = await api.post<BookingSeriesReport>(
 			"/create-booking-series",
 			data,
+		);
+		return response.data;
+	},
+
+	/**
+	 * Cherche les salles de remplacement d'une série à une date donnée :
+	 * les salles libres sur le même créneau, de la plus proche à la plus éloignée.
+	 *
+	 * @param seriesId - l'id de la série
+	 * @param date - la date de l'occurrence en échec à Paris, ex. : "2027-03-30"
+	 * @returns les salles libres (liste vide si aucune salle ne convient)
+	 */
+	async getReplacementClassrooms(
+		seriesId: number,
+		date: string,
+	): Promise<ReplacementClassroom[]> {
+		const response = await api.get<GetReplacementClassroomsResponse>(
+			`/get-replacement-classrooms/${seriesId}`,
+			// params : axios ajoute "?date=2027-03-30" à la fin de l'adresse
+			{ params: { date } },
+		);
+		return response.data.classrooms;
+	},
+
+	/**
+	 * Réserve des occurrences en échec d'une série, chacune dans la salle choisie.
+	 * Le backend renvoie un rapport de série pour ces dates : les réservations
+	 * obtenues, et les dates encore en échec (une salle a pu être prise entre-temps).
+	 *
+	 * @param seriesId - l'id de la série
+	 * @param occurrences - les dates à réserver, avec la salle choisie pour chacune
+	 * @returns le rapport de série de ces dates
+	 */
+	async addOccurrences(
+		seriesId: number,
+		occurrences: OccurrenceToBook[],
+	): Promise<BookingSeriesReport> {
+		const response = await api.post<BookingSeriesReport>(
+			`/add-booking-series-occurrences/${seriesId}`,
+			occurrences,
 		);
 		return response.data;
 	},
