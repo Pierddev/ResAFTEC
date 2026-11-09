@@ -4,9 +4,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	formatWeekRange,
+	getIsoWeek,
 	getMondayOfIsoWeek,
 	getSundayOfIsoWeek,
+	getWeeksInYear,
 	isValidIsoWeek,
+	isWeekBefore,
+	normalizeIsoWeek,
 	toIsoDate,
 } from "./isoWeek";
 
@@ -60,5 +64,84 @@ describe("formatWeekRange", () => {
 
 	it("affiche une semaine à cheval sur deux années", () => {
 		expect(formatWeekRange(53, 2026)).toBe("S53-2026 : du 28/12 au 03/01");
+	});
+});
+
+describe("getWeeksInYear", () => {
+	it("renvoie 53 ou 52 selon l'année", () => {
+		expect(getWeeksInYear(2026)).toBe(53);
+		expect(getWeeksInYear(2027)).toBe(52);
+	});
+});
+
+describe("getIsoWeek", () => {
+	// "2026-11-09T12:00:00" (sans Z à la fin) : midi à l'heure de l'ordinateur
+	it("renvoie la semaine d'un lundi et celle du dimanche qui suit", () => {
+		expect(getIsoWeek(new Date("2026-11-09T12:00:00"))).toEqual({
+			week: 46,
+			year: 2026,
+		});
+		expect(getIsoWeek(new Date("2026-11-15T12:00:00"))).toEqual({
+			week: 46,
+			year: 2026,
+		});
+	});
+
+	it("range le 1er janvier 2027 dans la dernière semaine de 2026", () => {
+		expect(getIsoWeek(new Date("2027-01-01T12:00:00"))).toEqual({
+			week: 53,
+			year: 2026,
+		});
+	});
+
+	it("range le 29 décembre 2025 dans la semaine 1 de 2026", () => {
+		expect(getIsoWeek(new Date("2025-12-29T12:00:00"))).toEqual({
+			week: 1,
+			year: 2026,
+		});
+	});
+});
+
+describe("normalizeIsoWeek", () => {
+	it("ne change pas une semaine qui existe", () => {
+		expect(normalizeIsoWeek(12, 2027)).toEqual({ week: 12, year: 2027 });
+		expect(normalizeIsoWeek(53, 2026)).toEqual({ week: 53, year: 2026 });
+	});
+
+	it("passe à la semaine 1 de l'année suivante après la dernière semaine", () => {
+		// 2026 a 53 semaines, 2027 n'en a que 52
+		expect(normalizeIsoWeek(54, 2026)).toEqual({ week: 1, year: 2027 });
+		expect(normalizeIsoWeek(53, 2027)).toEqual({ week: 1, year: 2028 });
+	});
+
+	it("passe à la dernière semaine de l'année précédente avant la semaine 1", () => {
+		expect(normalizeIsoWeek(0, 2027)).toEqual({ week: 53, year: 2026 });
+		expect(normalizeIsoWeek(0, 2028)).toEqual({ week: 52, year: 2027 });
+	});
+});
+
+describe("isWeekBefore", () => {
+	it("compare deux semaines de la même année", () => {
+		expect(
+			isWeekBefore({ week: 46, year: 2026 }, { week: 47, year: 2026 }),
+		).toBe(true);
+		expect(
+			isWeekBefore({ week: 47, year: 2026 }, { week: 46, year: 2026 }),
+		).toBe(false);
+	});
+
+	it("compare deux semaines d'années différentes", () => {
+		expect(
+			isWeekBefore({ week: 53, year: 2026 }, { week: 1, year: 2027 }),
+		).toBe(true);
+		expect(
+			isWeekBefore({ week: 1, year: 2027 }, { week: 53, year: 2026 }),
+		).toBe(false);
+	});
+
+	it("renvoie false pour la même semaine", () => {
+		expect(
+			isWeekBefore({ week: 46, year: 2026 }, { week: 46, year: 2026 }),
+		).toBe(false);
 	});
 });
