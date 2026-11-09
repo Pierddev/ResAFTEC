@@ -85,7 +85,7 @@ Les dates de la réponse sont en UTC (le `Z` à la fin) : `09:00Z` correspond à
 - Les semaines se choisissent par leur numéro ISO et leur année. Les semaines de début et de fin démarrent à la semaine actuelle, et la page affiche le lundi et le dimanche de chacune (ex. : `S12-2027 : du 22/03 au 28/03`).
 - Les boutons + et − passent d'une année à l'autre (S53-2026 → S1-2027). On ne peut pas choisir une semaine passée, et la semaine de fin suit la semaine de début si elle se retrouve avant.
 - Les heures se choisissent dans une liste, de 07:00 à 22:00 par quart d'heure. Le dimanche n'est proposé qu'aux administrateurs.
-- La page envoie le lundi de la semaine de début et le dimanche de la semaine de fin, puis affiche le rapport de série : une confirmation si toutes les dates sont réservées, sinon chaque date en échec avec son motif (« déjà réservée » ou « salle désactivée »).
+- La page envoie le lundi de la semaine de début et le dimanche de la semaine de fin, puis affiche le rapport de série : une confirmation si toutes les dates sont réservées, sinon chaque date en échec avec son motif (« déjà réservée » ou « salle désactivée ») et le choix d'une salle de remplacement (voir plus bas).
 - Le bénéficiaire est toujours la personne connectée : choisir un autre bénéficiaire n'est possible que par l'API.
 
 **Salle de remplacement :** pour une occurrence en échec, la route `GET /api/get-replacement-classrooms/:seriesId?date=AAAA-MM-JJ` propose d'autres salles sur le même créneau.
@@ -144,6 +144,12 @@ La réponse (201) est un rapport de série, au même format que pour la créatio
   "failed": []
 }
 ```
+
+**Choisir une salle de remplacement depuis la page :** quand des dates sont en échec, le rapport de série affiche sous chaque date la liste des salles de remplacement libres, de la plus proche à la plus éloignée (ex. : `A201 – 30 places, Bâtiment A, étage 2`).
+
+- Au départ, aucune salle n'est choisie (« Ne pas réserver cette date ») : le formateur peut laisser des dates sans réservation.
+- Le lien « Appliquer cette salle aux autres dates » apparaît quand la salle choisie est aussi libre à d'autres dates en échec. Il la choisit à toutes ces dates, même si une autre salle y était choisie. Les dates où elle n'est pas libre gardent leur choix.
+- « Réserver les dates choisies » envoie seulement les dates qui ont une salle. Le rapport est ensuite mis à jour : les nouvelles réservations s'ajoutent aux dates réservées, et les dates laissées sans salle ou de nouveau en échec (salle prise entre-temps) restent proposées, avec leurs salles libres recherchées à nouveau.
 
 Le vocabulaire (Série, Occurrence, Bénéficiaire…) est défini dans [GLOSSARY.md](GLOSSARY.md), et les choix de conception sont expliqués dans [l'ADR 0001](docs/adr/0001-serie-de-reservations.md).
 
