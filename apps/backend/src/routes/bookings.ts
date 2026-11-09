@@ -143,7 +143,8 @@ router.post("/create-booking", authenticate, bookingController.create);
  *       Les occurrences déjà commencées sont ignorées. Chaque occurrence libre devient une réservation ;
  *       une occurrence qui chevauche une réservation ou une désactivation de la salle est renvoyée dans `failed`.
  *       La série est enregistrée même si toutes les occurrences sont en échec.
- *       Réservé aux rôles `teacher` et `admin` ; un formateur (`teacher`) ne peut réserver que pour lui-même.
+ *       Réservé aux rôles `teacher` et `admin` ; un formateur (`teacher`) ne peut réserver que pour lui-même,
+ *       et pas le dimanche (seul un administrateur le peut).
  *     tags:
  *       - Bookings
  *     security:
@@ -180,7 +181,7 @@ router.post("/create-booking", authenticate, bookingController.create);
  *                 type: integer
  *                 minimum: 1
  *                 maximum: 7
- *                 description: Jour de la semaine (1 = lundi, ..., 7 = dimanche)
+ *                 description: Jour de la semaine (1 = lundi, ..., 7 = dimanche). Le dimanche est réservé aux administrateurs.
  *                 example: 2
  *               startTime:
  *                 type: string
@@ -254,7 +255,7 @@ router.post("/create-booking", authenticate, bookingController.create);
  *       401:
  *         description: Non authentifié (Token JWT manquant ou invalide)
  *       403:
- *         description: Rôle non autorisé, ou formateur qui réserve pour quelqu'un d'autre
+ *         description: Rôle non autorisé, ou formateur qui réserve pour quelqu'un d'autre ou un dimanche
  *         content:
  *           application/json:
  *             schema:
