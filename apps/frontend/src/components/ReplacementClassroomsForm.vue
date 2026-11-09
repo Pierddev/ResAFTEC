@@ -2,11 +2,12 @@
 // Dates en échec d'une série : pour chacune, le formateur peut choisir
 // une salle de remplacement libre sur le même créneau, ou ne pas la réserver.
 
-import { onMounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
 	type BookingSeriesReport,
 	bookingSeriesService,
 	type FailureReason,
+	type OccurrenceToBook,
 	type ReplacementClassroom,
 } from "@/services/bookingSeriesService";
 import { toParisIsoDate } from "@/utils/parisDate";
@@ -14,6 +15,12 @@ import { toParisIsoDate } from "@/utils/parisDate";
 // Le rapport de série reçu de la page de réservation
 const props = defineProps<{
 	report: BookingSeriesReport;
+}>();
+
+// Événement envoyé à la page après la réservation :
+// "booked" avec le rapport de toute la série, mis à jour
+const emit = defineEmits<{
+	booked: [updatedReport: BookingSeriesReport];
 }>();
 
 // Une ligne de la liste : une date en échec et la salle choisie pour elle
@@ -28,6 +35,17 @@ interface FailedDateRow {
 const rows = ref<FailedDateRow[]>([]);
 // true pendant la recherche des salles
 const isLoading = ref(false);
+
+// Message affiché si la réservation n'a pas pu être envoyée
+const errorMessage = ref("");
+// true pendant l'envoi : le bouton est désactivé pour éviter d'envoyer deux fois
+const isSending = ref(false);
+
+// Le bouton « Réserver les dates choisies » n'est utile
+// que si au moins une date a une salle de remplacement libre
+const hasReplacementClassrooms = computed(() =>
+	rows.value.some((row) => row.classrooms.length > 0),
+);
 
 // Texte affiché pour chaque motif d'échec renvoyé par l'API
 const failureReasonLabels: Record<FailureReason, string> = {
@@ -152,8 +170,90 @@ function applyToOtherDates(row: FailedDateRow) {
 	}
 }
 
-// onMounted : on cherche les salles dès que le composant est affiché
-onMounted(loadReplacementClassrooms);
+/**
+ * Construit le rapport de toute la série après la réservation des salles de remplacement.
+ * - Dates réservées : celles d'avant, plus les nouvelles.
+ * - Dates en échec : celles laissées sans salle, plus celles de nouveau en échec
+ *   (la salle choisie a été prise entre-temps).
+ *
+ * @param newReport - le rapport renvoyé par le backend pour les dates envoyées
+ * @param sentDates - les dates envoyées, au format du rapport (début du cours en UTC)
+ * @returns le rapport de toute la série
+ */
+function buildUpdatedReport(
+	newReport: BookingSeriesReport,
+	sentDates: string[],
+): BookingSeriesReport {
+	// Dates sans salle choisie : elles n'ont pas été envoyées, elles restent en échec
+	const datesLeft = props.report.failed.filter(
+		(occurrence) => !sentDates.includes(occurrence.date),
+	);
+
+	// [...a, ...b] : une nouvelle liste avec les éléments de a, puis ceux de b
+	const failed = [...datesLeft, ...newReport.failed];
+	// Les dates "AAAA-MM-JJTHH:mm..." se trient comme du texte :
+	// on les remet dans l'ordre, de la plus proche à la plus lointaine
+	failed.sort((a, b) => a.date.localeCompare(b.date));
+
+	return {
+		series: props.report.series,
+		booked: [...props.report.booked, ...newReport.booked],
+		failed: failed,
+	};
+}
+
+/**
+ * Réserve les dates pour lesquelles une salle est choisie,
+ * puis envoie à la page le rapport de série mis à jour.
+ * Les dates laissées sur « Ne pas réserver cette date » ne sont pas envoyées.
+ */
+async function bookReplacements() {
+	errorMessage.value = "";
+
+	// 1. On garde seulement les dates avec une salle choisie
+	const occurrences: OccurrenceToBook[] = [];
+	const sentDates: string[] = [];
+	for (const row of rows.value) {
+		if (row.selectedClassroomId !== null) {
+			occurrences.push({
+				// L'API attend la date du cours à Paris, ex. : "2027-03-30"
+				date: toParisIsoDate(row.date),
+				// Number() : l'API renvoie pour l'instant les id en texte ("6"), voir #217.
+				// Sans Number(), le backend refuse la demande : il attend un nombre.
+				classroomId: Number(row.selectedClassroomId),
+			});
+			sentDates.push(row.date);
+		}
+	}
+
+	// Le backend demande au moins une date
+	if (occurrences.length === 0) {
+		errorMessage.value = "Choisissez une salle pour au moins une date";
+		return;
+	}
+
+	// 2. Envoi au backend
+	isSending.value = true;
+	try {
+		const newReport = await bookingSeriesService.addOccurrences(
+			props.report.series.id,
+			occurrences,
+		);
+		// La page remplace son rapport par celui-ci
+		emit("booked", buildUpdatedReport(newReport, sentDates));
+	} catch (error) {
+		// Ex. : "Cette occurrence a déjà commencé" : rien n'a été réservé
+		errorMessage.value = (error as { message: string }).message;
+	} finally {
+		// Dans tous les cas, on réactive le bouton
+		isSending.value = false;
+	}
+}
+
+// watch : on cherche les salles à chaque nouveau rapport reçu de la page
+// (après une réservation, il reste peut-être des dates en échec).
+// immediate: true : on les cherche aussi une première fois, dès l'affichage du composant.
+watch(() => props.report, loadReplacementClassrooms, { immediate: true });
 </script>
 
 <template>
@@ -193,6 +293,13 @@ onMounted(loadReplacementClassrooms);
                     Appliquer cette salle aux autres dates
                 </button>
             </div>
+
+            <p v-if="errorMessage" class="card-error text-sm font-medium">{{ errorMessage }}</p>
+
+            <!-- type="button" : ce bouton ne doit pas envoyer le formulaire de la série -->
+            <button v-if="hasReplacementClassrooms" id="book_replacements" type="button" class="btn-login" :disabled="isSending" @click="bookReplacements">
+                {{ isSending ? "Réservation en cours..." : "Réserver les dates choisies" }}
+            </button>
         </template>
     </div>
 </template>

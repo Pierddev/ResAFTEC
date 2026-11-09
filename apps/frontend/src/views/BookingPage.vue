@@ -177,6 +177,16 @@ const isSending = ref(false);
 const report = ref<BookingSeriesReport | null>(null);
 
 /**
+ * Appelée quand des dates en échec ont été réservées dans des salles de remplacement :
+ * on affiche le rapport de série mis à jour.
+ *
+ * @param updatedReport - le rapport de toute la série, envoyé par ReplacementClassroomsForm
+ */
+function onReplacementsBooked(updatedReport: BookingSeriesReport) {
+	report.value = updatedReport;
+}
+
+/**
  * Construit le texte affiché sous une semaine choisie dans le formulaire.
  *
  * @param week - le numéro de semaine saisi
@@ -458,7 +468,8 @@ async function submitSeries() {
                             <p v-if="report.booked.length > 0" class="card-success text-sm font-medium">
                                 Dates réservées : {{ report.booked.length }}
                             </p>
-                            <ReplacementClassroomsForm :report="report" />
+                            <!-- @booked : le composant envoie le rapport mis à jour après la réservation -->
+                            <ReplacementClassroomsForm :report="report" @booked="onReplacementsBooked" />
                         </template>
                     </div>
                 </div>

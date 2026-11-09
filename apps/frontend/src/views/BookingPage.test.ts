@@ -2,10 +2,14 @@
 // On vérifie le formulaire de série (champs affichés, dates envoyées au backend, erreurs)
 // et le rapport de série affiché après la réponse du backend
 
-import { flushPromises, mount } from "@vue/test-utils";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/stores/auth";
 import BookingPage from "./BookingPage.vue";
+
+// Après chaque test, la page affichée est retirée du document :
+// le test suivant repart d'un document vide (voir attachTo dans mountAndFillForm)
+enableAutoUnmount(afterEach);
 
 // vi.mock() remplace les modules par des versions fictives : aucun appel au backend.
 // Toutes les requêtes GET reçoivent la même réponse : la page y lit
@@ -37,6 +41,7 @@ vi.mock("@/services/bookingSeriesService", () => ({
 	bookingSeriesService: {
 		create: vi.fn(),
 		getReplacementClassrooms: vi.fn().mockResolvedValue([]),
+		addOccurrences: vi.fn(),
 	},
 }));
 
@@ -76,7 +81,9 @@ async function mountAndFillForm(
 	endWeek: number,
 	year = 2027,
 ) {
-	const wrapper = mount(BookingPage);
+	// attachTo : la page est ajoutée au document, comme dans un vrai navigateur.
+	// Sans cela, cliquer sur un bouton n'envoie jamais le formulaire qui le contient.
+	const wrapper = mount(BookingPage, { attachTo: document.body });
 
 	// Filtres : bâtiment, puis étage, puis salle.
 	// flushPromises() attend la fin du chargement de la liste suivante.
@@ -397,6 +404,53 @@ describe("BookingPage - rapport de série", () => {
 		expect(reportText).toContain("mardi 30/03/2027 : déjà réservée");
 		expect(reportText).toContain("mardi 06/04/2027 : salle désactivée");
 		expect(reportText).not.toContain("Toutes les dates");
+	});
+
+	it("réserve une salle de remplacement aux dates en échec et met le rapport à jour", async () => {
+		// La série : une date réservée, deux dates en échec
+		vi.mocked(bookingSeriesService.create).mockResolvedValue({
+			series: { id: 1, title: "Cours de TypeScript" },
+			booked: [bookedOccurrence(51)],
+			failed: [
+				{ date: "2027-03-30T08:00:00.000Z", reason: "already_booked" },
+				{ date: "2027-04-06T08:00:00.000Z", reason: "disabled" },
+			],
+		});
+		// La salle A201 est libre aux deux dates en échec
+		const a201 = {
+			id: 6,
+			name: "A201",
+			capacity: 30,
+			floor: { id: 2, level: 2, building: { id: 1, name: "Bâtiment A" } },
+		};
+		vi.mocked(bookingSeriesService.getReplacementClassrooms)
+			.mockResolvedValueOnce([a201])
+			.mockResolvedValueOnce([a201]);
+		// Le backend réserve les deux dates dans cette salle
+		vi.mocked(bookingSeriesService.addOccurrences).mockResolvedValue({
+			series: { id: 1, title: "Cours de TypeScript" },
+			booked: [bookedOccurrence(52), bookedOccurrence(53)],
+			failed: [],
+		});
+
+		const wrapper = await mountAndFillForm(12, 14);
+		await submitForm(wrapper);
+		// A201 à la 1re date, recopiée à la 2e avec le raccourci, puis envoi
+		await wrapper.find("#replacement_0").setValue(6);
+		await wrapper.find("#apply_0").trigger("click");
+		await wrapper.find("#book_replacements").trigger("click");
+		await flushPromises();
+
+		expect(bookingSeriesService.addOccurrences).toHaveBeenCalledWith(1, [
+			{ date: "2027-03-30", classroomId: 6 },
+			{ date: "2027-04-06", classroomId: 6 },
+		]);
+		// 51 réservée à la création, 52 et 53 dans la salle de remplacement
+		expect(wrapper.find("#series_report").text()).toBe(
+			"Toutes les dates de la série sont réservées (3).",
+		);
+		// Les deux clics n'ont pas renvoyé le formulaire de la série
+		expect(bookingSeriesService.create).toHaveBeenCalledTimes(1);
 	});
 
 	it("n'affiche pas de rapport si le backend refuse la série", async () => {

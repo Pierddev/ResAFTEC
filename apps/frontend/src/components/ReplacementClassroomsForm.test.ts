@@ -10,10 +10,13 @@ import type {
 } from "@/services/bookingSeriesService";
 import ReplacementClassroomsForm from "./ReplacementClassroomsForm.vue";
 
-// getReplacementClassrooms() ne contacte pas le backend :
-// on choisit sa réponse dans chaque test
+// getReplacementClassrooms() et addOccurrences() ne contactent pas le backend :
+// on choisit leur réponse dans chaque test
 vi.mock("@/services/bookingSeriesService", () => ({
-	bookingSeriesService: { getReplacementClassrooms: vi.fn() },
+	bookingSeriesService: {
+		getReplacementClassrooms: vi.fn(),
+		addOccurrences: vi.fn(),
+	},
 }));
 
 // On importe la version fictive pour contrôler et vérifier ses appels
@@ -22,6 +25,7 @@ import { bookingSeriesService } from "@/services/bookingSeriesService";
 const getReplacementClassrooms = vi.mocked(
 	bookingSeriesService.getReplacementClassrooms,
 );
+const addOccurrences = vi.mocked(bookingSeriesService.addOccurrences);
 
 // Salles de remplacement (fictives)
 const a201: ReplacementClassroom = {
@@ -236,6 +240,169 @@ describe("ReplacementClassroomsForm", () => {
 			expect(getSelectedText(wrapper, "#replacement_2")).toBe(
 				"B101 – 35 places, Bâtiment B, étage 1",
 			);
+		});
+	});
+
+	describe("réservation des dates choisies", () => {
+		// Réponse du backend quand tout est réservé : son contenu n'est pas vérifié ici
+		const emptyReport: BookingSeriesReport = {
+			series: report.series,
+			booked: [],
+			failed: [],
+		};
+
+		it("envoie seulement les dates avec une salle choisie, avec la date de Paris", async () => {
+			getReplacementClassrooms
+				.mockResolvedValueOnce([a201])
+				.mockResolvedValueOnce([a201])
+				.mockResolvedValueOnce([b101]);
+			addOccurrences.mockResolvedValue(emptyReport);
+			const wrapper = await mountForm(reportWithThreeDates);
+
+			// A201 à la 1re date, B101 à la 3e ; la 2e reste sur « Ne pas réserver cette date »
+			await wrapper.find("#replacement_0").setValue(6);
+			await wrapper.find("#replacement_2").setValue(8);
+			await wrapper.find("#book_replacements").trigger("click");
+			await flushPromises();
+
+			// La 2e date (2027-04-06) n'est pas envoyée
+			expect(addOccurrences).toHaveBeenCalledWith(1, [
+				{ date: "2027-03-30", classroomId: 6 },
+				{ date: "2027-04-13", classroomId: 8 },
+			]);
+		});
+
+		it("envoie l'id de la salle en nombre, même si l'API le donne en texte", async () => {
+			// L'API renvoie pour l'instant les id en texte ("6"), voir #217.
+			// "as unknown as number" oblige TypeScript à accepter ce texte à la place d'un nombre.
+			const a201FromApi = { ...a201, id: "6" as unknown as number };
+			getReplacementClassrooms
+				.mockResolvedValueOnce([a201FromApi])
+				.mockResolvedValueOnce([]);
+			addOccurrences.mockResolvedValue(emptyReport);
+			const wrapper = await mountForm();
+
+			await wrapper.find("#replacement_0").setValue("6");
+			await wrapper.find("#book_replacements").trigger("click");
+			await flushPromises();
+
+			expect(addOccurrences).toHaveBeenCalledWith(1, [
+				{ date: "2027-03-30", classroomId: 6 },
+			]);
+		});
+
+		it("affiche un message si aucune salle n'est choisie", async () => {
+			getReplacementClassrooms.mockResolvedValue([a201]);
+			const wrapper = await mountForm();
+
+			await wrapper.find("#book_replacements").trigger("click");
+
+			expect(wrapper.text()).toContain(
+				"Choisissez une salle pour au moins une date",
+			);
+			expect(addOccurrences).not.toHaveBeenCalled();
+		});
+
+		it("n'affiche pas le bouton si aucune salle n'est libre", async () => {
+			getReplacementClassrooms.mockResolvedValue([]);
+
+			const wrapper = await mountForm();
+
+			expect(wrapper.find("#book_replacements").exists()).toBe(false);
+		});
+
+		it("envoie à la page le rapport de toute la série, mis à jour", async () => {
+			// Au départ : une date déjà réservée (le 23/03) et trois dates en échec
+			const startingReport: BookingSeriesReport = {
+				...reportWithThreeDates,
+				booked: [
+					{
+						id: 51,
+						start_at: "2027-03-23T09:00:00.000Z",
+						end_at: "2027-03-23T11:00:00.000Z",
+					},
+				],
+			};
+			getReplacementClassrooms.mockResolvedValue([a201]);
+			// Le backend réserve le 06/04, mais A201 a été prise entre-temps le 30/03
+			addOccurrences.mockResolvedValue({
+				series: report.series,
+				booked: [
+					{
+						id: 60,
+						start_at: "2027-04-06T08:00:00.000Z",
+						end_at: "2027-04-06T10:00:00.000Z",
+					},
+				],
+				failed: [
+					{ date: "2027-03-30T08:00:00.000Z", reason: "already_booked" },
+				],
+			});
+			const wrapper = await mountForm(startingReport);
+
+			// A201 aux deux premières dates ; la 3e (13/04) reste sans salle
+			await wrapper.find("#replacement_0").setValue(6);
+			await wrapper.find("#replacement_1").setValue(6);
+			await wrapper.find("#book_replacements").trigger("click");
+			await flushPromises();
+
+			// emitted("booked") : la liste des événements "booked" envoyés à la page,
+			// chacun avec ses paramètres
+			const events = wrapper.emitted("booked");
+			expect(events).toHaveLength(1);
+			expect(events?.[0]).toEqual([
+				{
+					series: report.series,
+					// L'ancienne réservation, puis la nouvelle
+					booked: [
+						startingReport.booked[0],
+						expect.objectContaining({ id: 60 }),
+					],
+					// La date laissée sans salle et celle de nouveau en échec, dans l'ordre des dates
+					failed: [
+						{ date: "2027-03-30T08:00:00.000Z", reason: "already_booked" },
+						{ date: "2027-04-13T08:00:00.000Z", reason: "already_booked" },
+					],
+				},
+			]);
+		});
+
+		it("affiche le message du backend si la réservation est refusée", async () => {
+			getReplacementClassrooms.mockResolvedValue([a201]);
+			addOccurrences.mockRejectedValue({
+				message: "Cette occurrence a déjà commencé",
+			});
+			const wrapper = await mountForm();
+
+			await wrapper.find("#replacement_0").setValue(6);
+			await wrapper.find("#book_replacements").trigger("click");
+			await flushPromises();
+
+			expect(wrapper.text()).toContain("Cette occurrence a déjà commencé");
+			// Rien n'a été réservé : la page garde son rapport
+			expect(wrapper.emitted("booked")).toBeUndefined();
+		});
+
+		it("cherche de nouveau les salles quand la page envoie un nouveau rapport", async () => {
+			getReplacementClassrooms.mockResolvedValue([a201]);
+			const wrapper = await mountForm();
+			expect(getReplacementClassrooms).toHaveBeenCalledTimes(2);
+
+			// Nouveau rapport : il ne reste que la date du 06/04
+			await wrapper.setProps({
+				report: {
+					...report,
+					failed: [{ date: "2027-04-06T08:00:00.000Z", reason: "disabled" }],
+				},
+			});
+			await flushPromises();
+
+			expect(getReplacementClassrooms).toHaveBeenCalledTimes(3);
+			expect(getReplacementClassrooms).toHaveBeenLastCalledWith(
+				1,
+				"2027-04-06",
+			);
+			expect(wrapper.text()).toContain("Dates non réservées : 1");
 		});
 	});
 });
