@@ -105,6 +105,38 @@ GET /api/get-replacement-classrooms/1?date=2026-11-10
 
 Une liste vide signifie qu'aucune salle ne convient sur ce créneau.
 
+**Réserver les occurrences en échec :** une fois les salles de remplacement choisies, la route `POST /api/add-booking-series-occurrences/:seriesId` réserve chaque date en échec dans la salle choisie. Les réservations obtenues font partie de la même série, même si leur salle n'est pas la salle principale.
+
+- Le corps est une liste de 1 à 52 occurrences `{ date, classroomId }`, avec chaque date une seule fois.
+- Le titre, le bénéficiaire et le créneau sont repris de la série.
+- Mêmes vérifications que pour la création : si la salle choisie a été réservée ou désactivée entre-temps, l'occurrence revient dans `failed`. Les réservations libres sont enregistrées en une seule transaction.
+- Si une date n'est pas une occurrence à venir de la série, ou si une salle n'existe pas, rien n'est réservé (erreur 400).
+- Seuls l'auteur de la série et un administrateur peuvent réserver (403 sinon, 404 si la série n'existe pas).
+
+**Exemple :** l'occurrence du mardi 10 novembre, réservée dans la salle A101 proposée ci-dessus.
+
+```
+POST /api/add-booking-series-occurrences/1
+```
+
+```json
+[
+  { "date": "2026-11-10", "classroomId": 4 }
+]
+```
+
+La réponse (201) est un rapport de série, au même format que pour la création :
+
+```json
+{
+  "series": { "id": 1, "title": "Cours de TypeScript", "day_of_week": 2, "...": "..." },
+  "booked": [
+    { "id": 52, "start_at": "2026-11-10T09:00:00.000Z", "end_at": "2026-11-10T11:00:00.000Z" }
+  ],
+  "failed": []
+}
+```
+
 Le vocabulaire (Série, Occurrence, Bénéficiaire…) est défini dans [GLOSSARY.md](GLOSSARY.md), et les choix de conception sont expliqués dans [l'ADR 0001](docs/adr/0001-serie-de-reservations.md).
 
 ### Modèle de Données
